@@ -50,6 +50,18 @@ export function fmtShortDate(iso: string | null | undefined): string {
     : { month: "short", day: "numeric", year: "numeric" });
 }
 
+// Display form of a single URL: strip protocol, drop trailing slash, truncate
+// past 30 chars. THE one definition of this rule — consumed by both the
+// renderer (linkify.tsx, per URL token) and the height predictor
+// (compute-bookmark-height.ts, over a whole string). They previously held
+// byte-identical inline copies behind a "KEEP IN SYNC" comment; a quote-path
+// site that forgot to apply it caused persistent layout gaps. Mirrors vanilla
+// index.html:3689-3690.
+export function shortenUrlForDisplay(url: string): string {
+  const display = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  return display.length > 30 ? display.slice(0, 30) + "…" : display;
+}
+
 // Replace each t.co/xxx in text with the corresponding expanded URL from `links`,
 // in document order. Any t.co without a matching entry is stripped — media-only
 // tweets ship as {text: "... https://t.co/xxx", links: []} where the trailing

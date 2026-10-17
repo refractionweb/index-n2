@@ -147,6 +147,10 @@ export function BookmarkList({
   const [containerWidth, setContainerWidth] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [viewportH, setViewportH] = useState(0);
+  // False while the user is actively scrolling (150 ms settle window).
+  // Feeds CardVideo's mount strategy via BookmarkCard — see card-video.tsx.
+  // Mirrors gallery-list's flag of the same name.
+  const [scrollSettled, setScrollSettled] = useState(true);
   const [columnOffsets, setColumnOffsets] = useState<number[]>([]);
   // Override map: (bookmark.id + innerWidth bucket) → corrected total
   // height from DOM measurement. Populated by the boundary-resolution
@@ -351,11 +355,27 @@ export function BookmarkList({
 
     update();
     let frame = 0;
+    let scrollSettleTimer: ReturnType<typeof setTimeout> | null = null;
+    // Track settled state in a closure variable so we only fire the React
+    // setter on transitions (settled → moving, moving → settled). Calling
+    // setState every scroll frame would defeat BookmarkCard's memo for the
+    // settle prop. Same pattern as gallery-list.
+    let isSettled = true;
     const onScroll = () => {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
         update();
+        if (isSettled) {
+          isSettled = false;
+          setScrollSettled(false);
+        }
+        if (scrollSettleTimer) clearTimeout(scrollSettleTimer);
+        scrollSettleTimer = setTimeout(() => {
+          scrollSettleTimer = null;
+          isSettled = true;
+          setScrollSettled(true);
+        }, 150);
       });
     };
     scrollEl.addEventListener("scroll", onScroll, { passive: true });
@@ -364,6 +384,7 @@ export function BookmarkList({
       scrollEl.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", update);
       if (frame) cancelAnimationFrame(frame);
+      if (scrollSettleTimer) clearTimeout(scrollSettleTimer);
     };
   }, []);
 
@@ -794,6 +815,9 @@ export function BookmarkList({
         if (renderedY + pos.h <= viewTop || renderedY >= viewBottom) {
           return null;
         }
+        // Viewport proper (no overscan) — feeds CardVideo's mount strategy.
+        const isInViewport =
+          renderedY + pos.h > scrollY && renderedY < scrollY + viewportH;
         return (
           <div
             key={item.id}
@@ -804,7 +828,11 @@ export function BookmarkList({
               width: `${pos.w}px`,
             }}
           >
-            <BookmarkCard bookmark={item} />
+            <BookmarkCard
+              bookmark={item}
+              scrollSettled={scrollSettled}
+              isInViewport={isInViewport}
+            />
           </div>
         );
       })}

@@ -25,7 +25,7 @@ import {
   ARTICLE_PENDING_CODE,
   ARTICLE_PENDING_SUFFIX,
 } from "@/components/article-block";
-import { expandTcoLinks } from "./format";
+import { expandTcoLinks, shortenUrlForDisplay } from "./format";
 import { extractReplyHandles } from "./reply-handles";
 
 const TEXT_LIMIT = 280;
@@ -192,21 +192,15 @@ function tokenize(
   });
 }
 
-// Mirror linkifyText's URL display rule (linkify.tsx:28-29). The renderer
-// strips the protocol, drops the trailing slash, and truncates to 30 chars
-// + "…" for any URL it finds in the displayed text. Without mirroring
-// this here, the height predictor measures expanded URL strings that can
-// be 3–4× wider than what the browser renders — producing visible gaps
-// below cards that contain long URLs (the linkify.tsx comment explicitly
-// flagged this contract; the function it referenced was never written).
-//
-// KEEP IN SYNC with linkify.tsx.
+// Apply linkifyText's per-URL display rule across a whole string. linkify
+// splits text into tokens and shortens each URL token; here we measure an
+// unsplit string, so we find URLs with the same pattern and shorten each via
+// the shared shortenUrlForDisplay — the renderer and predictor now use ONE
+// definition of the rule, not two mirrored copies. Without this, the
+// predictor measures expanded URL strings 3–4× wider than rendered, producing
+// visible gaps below cards with long URLs.
 function shortenUrlsForDisplay(text: string): string {
-  return text.replace(/https?:\/\/\S+/g, (url) => {
-    let display = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-    if (display.length > 30) display = display.slice(0, 30) + "…";
-    return display;
-  });
+  return text.replace(/https?:\/\/\S+/g, shortenUrlForDisplay);
 }
 
 function getBodyData(bookmark: Bookmark): BodyTextData {
@@ -240,7 +234,13 @@ function getQuoteData(quote: QuotedTweet): QuoteTextData {
 
   const text = quote.text || "";
   const truncated = text.length > TEXT_LIMIT;
-  const displayText = truncated ? text.slice(0, TEXT_LIMIT) + "…" : text;
+  // Truncate THEN shorten URLs, mirroring the renderer
+  // (quoted-tweet-card.tsx → linkifyText) and the body path in getBodyData.
+  // Quoted tweets have no `links` field so nothing expands, but linkify still
+  // strips protocols / truncates long URLs — measuring the raw URL over-counts
+  // line width and leaves a gap under the quoted card.
+  const baseDisplayText = truncated ? text.slice(0, TEXT_LIMIT) + "…" : text;
+  const displayText = shortenUrlsForDisplay(baseDisplayText);
   const hasText = !!displayText;
   const hasMedia = !!(quote.media && quote.media.length > 0);
 

@@ -1,6 +1,15 @@
-import { useRef, type ChangeEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import {
   COLOR_PRESETS,
+  displayHex,
+  expandHexShorthand,
   hexToRgb,
   hsvToRgb,
   rgbToHex,
@@ -13,6 +22,10 @@ import {
 } from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
 
+// hex is the canonical storage form: lowercase "#rrggbb" (rgbToHex's output).
+// It must stay valid as a CSS color and string-comparable against
+// COLOR_PRESETS; display surfaces (hex field, filter label) render it via
+// displayHex() instead.
 export type ColorSelection =
   | { special: "mono" }
   | { hex: string; h: number; s: number; v: number };
@@ -104,11 +117,72 @@ export function ColorPicker({ value, onChange }: Props) {
 
   // --- Hex input ------------------------------------------------------------
 
+  // Field form is bare uppercase hex ("FF8800") — no "#".
+  const committedDisplay = current ? displayHex(current.hex) : "";
+
+  // Draft state: a commit needs a full 6-digit parse, so binding the input
+  // straight to the committed hex would revert every intermediate keystroke
+  // ("f", "ff00"). Same local-state-then-commit pattern as NumberRow in
+  // settings-view.tsx. The sync effect doubles as caps normalization once
+  // a typed value commits.
+  const [hexDraft, setHexDraft] = useState(committedDisplay);
+
+  // Sync draft when the committed hex changes externally (SV/hue drag,
+  // preset click, clear).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- external-value sync
+    setHexDraft(committedDisplay);
+  }, [committedDisplay]);
+
   const onHexChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const rgb = hexToRgb(e.target.value);
+    // Strip a pasted leading "#" and cap at 6 here rather than via
+    // maxLength — maxLength would truncate a 7-char "#ffffff" paste
+    // before this handler can normalize it.
+    const text = e.target.value.trim().replace(/^#/, "").slice(0, 6);
+    setHexDraft(text);
+    if (e.target.value === "") {
+      // Deleting the value drops the color filter.
+      if (current) onChange(null);
+      return;
+    }
+    const rgb = hexToRgb(text);
     if (!rgb) return;
     const { h, s, v } = rgbToHsv(rgb[0], rgb[1], rgb[2]);
     onChange({ hex: rgbToHex(rgb[0], rgb[1], rgb[2]), h, s, v });
+  };
+
+  // Enter finalizes the entry: a 1-3 digit shorthand expands and commits
+  // ("3f" → 3F3F3F, "f80" → FF8800), anything else keeps the usual
+  // commit/revert semantics. Either way focus is released.
+  const onHexKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    const expanded = expandHexShorthand(hexDraft);
+    if (expanded) {
+      const rgb = hexToRgb(expanded);
+      if (rgb) {
+        const { h, s, v } = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        const hex = rgbToHex(rgb[0], rgb[1], rgb[2]);
+        setHexDraft(displayHex(hex));
+        onChange({ hex, h, s, v });
+      }
+    }
+    e.currentTarget.blur();
+  };
+
+  // A draft that parses as a full hex is always already committed — every
+  // path that produces one (live commit on the 6th typed digit, Enter
+  // expansion above) writes the selection in the same breath — so keep it,
+  // normalized to display form. Deciding from the draft matters: blur can
+  // fire in the same tick as an Enter commit, before committedDisplay
+  // re-renders, and a closure comparison would revert against the stale
+  // value. Anything that doesn't parse is an abandoned partial: revert.
+  const onHexBlur = () => {
+    const rgb = hexToRgb(hexDraft);
+    if (rgb) {
+      setHexDraft(displayHex(rgbToHex(rgb[0], rgb[1], rgb[2])));
+    } else {
+      setHexDraft(committedDisplay);
+    }
   };
 
   // --- Presets --------------------------------------------------------------
@@ -242,10 +316,11 @@ export function ColorPicker({ value, onChange }: Props) {
       <InputGroup>
         <InputGroupInput
           type="text"
-          placeholder="#000000"
-          maxLength={7}
-          value={current?.hex ?? ""}
+          placeholder="FFFFFF"
+          value={hexDraft}
           onChange={onHexChange}
+          onKeyDown={onHexKeyDown}
+          onBlur={onHexBlur}
           className="font-mono"
         />
         <InputGroupAddon align="inline-start">

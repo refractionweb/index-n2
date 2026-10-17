@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { shortenUrlForDisplay } from "@/lib/format";
 import { highlightText } from "@/lib/highlight";
 
 // Turn plain text into React nodes where URLs and @mentions become clickable
@@ -20,15 +21,11 @@ export function linkifyText(text: string, highlight?: string): ReactNode[] {
   for (const part of text.split(TOKEN)) {
     if (!part) continue;
     if (/^https?:\/\//.test(part)) {
-      // Vanilla index.html:3689-3690: strip protocol, drop trailing slash,
-      // truncate to 30 chars. Keeps long links from blowing out the card.
-      // KEEP IN SYNC with `shortenUrlsForDisplay` in
-      // src/lib/compute-bookmark-height.ts — the height predictor measures
-      // the same display string we render here, so any change to this rule
-      // must mirror over (without it, height prediction over-counts lines
-      // for cards with long URLs and produces visible gaps in the layout).
-      let display = part.replace(/^https?:\/\//, "").replace(/\/$/, "");
-      if (display.length > 30) display = display.slice(0, 30) + "…";
+      // Strip protocol, drop trailing slash, truncate to 30 chars — keeps
+      // long links from blowing out the card. The height predictor measures
+      // this same display string, so the rule is shared (not mirrored) via
+      // shortenUrlForDisplay.
+      const display = shortenUrlForDisplay(part);
       out.push(
         <a
           key={key++}

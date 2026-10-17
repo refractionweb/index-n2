@@ -243,20 +243,53 @@ function safeJoin(base, reqSegment) {
 // some redirects, so it's a less reliable signal — the API is browser-fetch
 // only, where Origin is always present. Absent Origin = treated as untrusted
 // for writes (curl/extensions hit safe-read endpoints or pass
-// --header "Origin: http://localhost").
+// --header "Origin: http://localhost:<port>").
+//
+// Exact-origin match (scheme+host+port), not hostname-only: any other local
+// app — a dev server, a notebook, a page XSS'd on some other port — is a
+// different origin and must not write. The vite dev client (5173) is
+// allowlisted: `npm run dev` proxies /api here but forwards the browser's
+// real Origin. That forwarding is also what stops a third page from
+// laundering writes through the proxy — it would still present its own
+// Origin, not 5173's.
 function isSameOrigin(req) {
   const source = req.headers.origin;
   if (!source) return false;
-  try {
-    const { hostname } = new URL(source);
-    return hostname === "localhost" || hostname === "127.0.0.1";
-  } catch { return false; }
+  return (
+    source === `http://localhost:${PORT}` ||
+    source === `http://127.0.0.1:${PORT}` ||
+    source === "http://localhost:5173" ||
+    source === "http://127.0.0.1:5173"
+  );
 }
 
 function requireSameOrigin(req, res) {
   if (isSameOrigin(req)) return true;
   res.writeHead(403, { "Content-Type": "application/json" });
   res.end('{"error":"forbidden"}');
+  return false;
+}
+
+// DNS-rebinding defense: a page at evil.com whose DNS is rebound to
+// 127.0.0.1 reaches this server with requests the browser considers
+// same-origin — no CORS, fully readable responses. Binding to loopback
+// doesn't help; the connection genuinely arrives on 127.0.0.1, with
+// Host: evil.com. Requiring a loopback hostname in Host kills the class
+// (same defense as Vite's allowedHosts). Hostname only — the port is
+// ignored because the vite dev proxy forwards the browser's Host
+// (localhost:5173) untouched.
+function requireAllowedHost(req, res) {
+  const host = req.headers.host;
+  if (host) {
+    try {
+      const { hostname } = new URL(`http://${host}`);
+      if (hostname === "localhost" || hostname === "127.0.0.1") return true;
+    } catch {
+      // unparseable Host → fall through to 403
+    }
+  }
+  res.writeHead(403, { "Content-Type": "application/json" });
+  res.end('{"error":"forbidden host"}');
   return false;
 }
 
@@ -973,6 +1006,7 @@ const server = createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
   setSecurityHeaders(res);
+  if (!requireAllowedHost(req, res)) return;
 
   // API: bookmarks
   if (path === "/api/bookmarks") {

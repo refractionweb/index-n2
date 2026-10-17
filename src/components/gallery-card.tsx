@@ -1,4 +1,5 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef } from "react";
+import { CardVideo } from "@/components/card-video";
 import { MediaPlaceholder } from "@/components/media-placeholder";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLightbox } from "@/contexts/lightbox-context";
@@ -28,23 +29,14 @@ export const GalleryCard = memo(function GalleryCard({
   isInViewport = false,
 }: {
   item: GalleryItem;
-  // When false (during/just-after fast scroll), video items render their
-  // poster as a plain <img> instead of mounting a <video> element. Reason:
-  // <video autoPlay> overrides preload="none" and fires a 3–4 MB range GET
-  // on every mount. During a fast scrollbar drag we'd see hundreds of mp4
-  // fetches, each holding a connection slot for ~70 ms, blocking the small
-  // thumbs the user actually wants to see. Switching the source per scroll
-  // velocity confines the video element to settled scroll states.
+  // Scroll-aware video mounting — both flags feed CardVideo, which owns
+  // the mitigation (poster <img> during fast scroll, 50 ms viewport
+  // hold-off, fetch cancellation). See card-video.tsx for the full why.
   scrollSettled?: boolean;
-  // True when this card overlaps the actual viewport (excluding overscan).
-  // Items in the viewport keep their <video> mounted during scroll so an
-  // already-playing video doesn't blip off when the user scrolls slightly.
-  // Combined with a 50 ms hold-off (below) so fast-scroll transit items
-  // that briefly cross the viewport don't trigger a mount + mp4 fetch.
   isInViewport?: boolean;
 }) {
   const { bookmark, media } = item;
-  const { open: openLightbox, target: lightboxTarget } = useLightbox();
+  const { open: openLightbox } = useLightbox();
   const { isSelected, toggle } = useSelection();
   const { settings } = useSettings();
   const selected = isSelected(bookmark.id);
@@ -53,70 +45,15 @@ export const GalleryCard = memo(function GalleryCard({
   const src = media.thumb ?? media.url;
   const isVideoType = media.type === "video" || media.type === "animated_gif";
 
-  // 50 ms hold-off: only treat the card as "stably in viewport" once it's
-  // been there continuously for ~50 ms. Items that just briefly pass through
-  // the viewport during fast scroll never clear this threshold and so never
-  // mount a <video>. Slow / reading scroll dwell times are well above 50 ms,
-  // so the delay is imperceptible there.
-  const [stableInViewport, setStableInViewport] = useState(false);
-  useEffect(() => {
-    if (!isInViewport) {
-      setStableInViewport(false);
-      return;
-    }
-    const t = setTimeout(() => setStableInViewport(true), 50);
-    return () => clearTimeout(t);
-  }, [isInViewport]);
-
-  const showVideo = isVideoType && (stableInViewport || scrollSettled);
-
-  // Pause gallery video playback while the lightbox is open. The <video>
-  // element stays mounted so the mp4 buffer is preserved — on close,
-  // .play() resumes from the paused position instead of restarting.
-  // Note: pause does NOT abort the in-flight mp4 fetch (the browser keeps
-  // filling its buffer in the background); this is for CPU/decode/battery
-  // relief and to free the user's attention, not connection-slot relief.
-  // showVideo is a dep so a freshly-mounted <video> (e.g. user scrolled and
-  // the 50 ms hold-off expired) gets immediately paused if the lightbox is
-  // already open at that moment.
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (lightboxTarget) {
-      v.pause();
-    } else if (autoplay) {
-      void v.play().catch(() => {});
-    }
-  }, [lightboxTarget, autoplay, showVideo]);
-
-  // Cancel in-flight fetches when the rendered media element changes (video
-  // ↔ img on showVideo flip) or when the card unmounts entirely.
-  //
-  // - For <img>: clearing `src` cancels the in-flight image fetch.
-  // - For <video>: clearing `src` and calling `load()` resets the media
-  //   element, which cancels in-flight network activity for the mp4 range
-  //   GET that autoplay started. Setting `poster = ""` would only cancel
-  //   the poster image fetch, not the video's src fetch.
-  //
-  // Deps are `[showVideo]` so the effect re-runs on every element swap.
-  // That gives the cleanup access to refs captured at the most recent run,
-  // which always match the currently-rendered element. With empty deps,
-  // refs would be stale after a video↔img swap; reading refs at cleanup
-  // time instead would race React's commit, which detaches refs before
-  // running unmount cleanups.
+  // Cancel an in-flight photo fetch on unmount: clearing `src` aborts the
+  // request. (The video-side equivalent lives in CardVideo.)
   const imgRef = useRef<HTMLImageElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const img = imgRef.current;
-    const video = videoRef.current;
     return () => {
       if (img) img.src = "";
-      if (video) {
-        video.removeAttribute("src");
-        video.load();
-      }
     };
-  }, [showVideo]);
+  }, []);
 
   const handleClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -144,42 +81,22 @@ export const GalleryCard = memo(function GalleryCard({
     >
       {!media.url && !media.thumb ? (
         <MediaPlaceholder className="h-full w-full" />
-      ) : showVideo ? (
-        // fetchPriority="low" hints to the browser that, when allocating
-        // connection slots, mp4 range GETs should defer to the small image
-        // fetches happening at the same time. Soft preference, not a strict
-        // serialization — but enough to bias the queue toward thumbnails.
-        <video
-          ref={videoRef}
-          src={media.url ?? undefined}
-          poster={media.thumb ?? undefined}
-          autoPlay={autoplay}
-          muted={autoplay}
-          loop={autoplay}
-          playsInline
-          preload="none"
-          // @ts-expect-error: fetchpriority on <video> isn't in React's
-          // typings yet but Chromium/WebKit honor it.
-          fetchpriority="low"
-          className="h-full w-full object-cover"
+      ) : isVideoType ? (
+        <CardVideo
+          url={media.url}
+          poster={media.thumb}
+          autoplay={autoplay}
+          scrollSettled={scrollSettled}
+          isInViewport={isInViewport}
+          // box geometry only — CardVideo's layers apply object-cover inside
+          className="h-full w-full"
         />
-      ) : isVideoType && !media.thumb ? (
-        // Video bookmark whose poster file isn't on disk yet (window
-        // between `ft sync` recording the bookmark and `ft fetch-media`
-        // downloading the poster — narrow on ft 1.3.18+ which fetches
-        // inline, wider when sync ran with `--no-media`). The
-        // `src ?? media.url` fallback would land on the mp4, which
-        // <img> can't decode → broken-icon glyph. Show a clean
-        // placeholder until the poster catches up.
-        <div className="bg-muted h-full w-full" aria-hidden="true" />
       ) : (
-        // Photos always take this branch. Videos take it during scroll —
-        // showing the poster as a static image instead of a real video
-        // element keeps the visual but avoids the mp4 range fetch.
-        // No `loading="lazy"`: virtualization already handles "only mount
-        // near viewport," which is a stronger guarantee than the browser's
-        // own lazy heuristic. fetchPriority="high" pairs with the video's
-        // "low" so thumbs win the queue when both are competing for slots.
+        // Photos. No `loading="lazy"`: virtualization already handles
+        // "only mount near viewport," which is a stronger guarantee than
+        // the browser's own lazy heuristic. fetchPriority="high" pairs
+        // with CardVideo's "low" so thumbs win the queue when both are
+        // competing for slots.
         <img
           ref={imgRef}
           src={src ?? undefined}

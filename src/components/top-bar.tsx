@@ -74,6 +74,7 @@ import { useFilteredGallery } from "@/hooks/use-filtered-gallery";
 import { useSearchHistory } from "@/hooks/use-search-history";
 import { matchesType } from "@/lib/filter";
 import { UNCLASSIFIED_CATEGORY } from "@/lib/categories";
+import { displayHex } from "@/lib/color-space";
 import { formatLanguageName, isDisplayableLanguage } from "@/lib/language";
 import {
   ZOOM_LEVELS,
@@ -161,7 +162,7 @@ export function TopBar() {
     ? "Color"
     : "special" in state.color
       ? "Mono"
-      : state.color.hex;
+      : displayHex(state.color.hex);
 
   const categoryLabel =
     state.categories.size === 0
@@ -435,7 +436,19 @@ function SearchInput() {
   const [activeIndex, setActiveIndex] = useState(-1);
   const blurTimer = useRef<number | null>(null);
 
-  const setSearch = (q: string) => dispatch({ type: "setSearch", query: q });
+  // Mirror of state.search for handlers that run before React re-renders:
+  // an Enter-pick sets the query and blurs in the same tick, so onBlur's
+  // closure would otherwise record the stale typed prefix into history.
+  // Same ref-mirror idiom as hidden-context.
+  const searchRef = useRef(state.search);
+  useEffect(() => {
+    searchRef.current = state.search;
+  }, [state.search]);
+
+  const setSearch = (q: string) => {
+    searchRef.current = q;
+    dispatch({ type: "setSearch", query: q });
+  };
 
   // Plain substring filter. History is capped at 10 entries so simple .includes
   // is fine — no need for cmdk/Intl.Collator fuzzy matching here.
@@ -460,13 +473,23 @@ function SearchInput() {
     }
   };
 
+  // Picks push explicitly because the mouse path never blurs (the item's
+  // mousedown preventDefaults to keep input focus). Typed queries are
+  // recorded by onBlur alone — its push(searchRef.current) dedups against
+  // a preceding pick, so each settle records exactly one entry.
+  const pickItem = (item: string) => {
+    setSearch(item);
+    push(item);
+    setFocused(false);
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
       setFocused(false);
       return;
     }
     if (!open) {
-      if (e.key === "Enter") push(state.search);
+      if (e.key === "Enter") e.currentTarget.blur(); // onBlur records the query
       return;
     }
     if (e.key === "ArrowDown") {
@@ -477,21 +500,9 @@ function SearchInput() {
       setActiveIndex((i) => Math.max(-1, i - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (activeIndex >= 0) {
-        const picked = filteredHistory[activeIndex];
-        setSearch(picked);
-        push(picked);
-        setFocused(false);
-      } else {
-        push(state.search);
-      }
+      if (activeIndex >= 0) pickItem(filteredHistory[activeIndex]);
+      e.currentTarget.blur();
     }
-  };
-
-  const pickItem = (item: string) => {
-    setSearch(item);
-    push(item);
-    setFocused(false);
   };
 
   return (
@@ -512,7 +523,7 @@ function SearchInput() {
               // Defer so a click on a popover row registers before we close
               // (mousedown→blur→click ordering). Items themselves cancel the
               // pending blur via cancelBlur in onMouseDown.
-              push(state.search);
+              push(searchRef.current);
               blurTimer.current = window.setTimeout(() => {
                 setFocused(false);
                 blurTimer.current = null;

@@ -6,7 +6,7 @@ A local viewer for [fieldtheory-cli](https://github.com/afar1/fieldtheory-cli). 
 
 Third-party tool, not affiliated with fieldtheory-cli.
 
-Made for Macintosh. The GUI runs anywhere; the CLI's default sync targets macOS. For cross-platform options, see the CLI's `ft sync --api` mode and its caveats.
+Available for Macintosh, Linux and Windows systems. On Windows, sync runs through Firefox; other browsers aren't supported there. (Manual cookie paste and the paid X API work anywhere.)
 
 ## Install
 
@@ -120,7 +120,8 @@ Per-file caches (palette, pHash, thumbnails) are keyed by media filename and gro
 The server is a localhost-only Node process. Defenses:
 
 - **Bind to 127.0.0.1.**
-- **Origin check on writes.** Every mutating endpoint requires an `Origin` header resolving to `localhost` or `127.0.0.1`. Cross-origin POSTs return 403.
+- **Host-header validation.** Every request must carry a loopback `Host` (`localhost` / `127.0.0.1`). Anything else — e.g. a DNS-rebound hostname — returns 403.
+- **Origin check on writes.** Every mutating endpoint requires an `Origin` header matching the server's own origin (or the vite dev client's). Cross-origin POSTs — including from other localhost ports — return 403.
 - **Path traversal + symlink escape guard.** Every static-file request — `/media/`, `/thumbs/`, and the SPA bundle in `dist/` — is resolved lexically, then `realpath`-validated to lie under its base directory.
 - **Media extension whitelist.** Image and video formats only — no SVG, no HTML.
 - **Strict CSP.** No remote scripts; the only inline script is hash-allowlisted. Styles, images, fonts, and media follow standard SPA carve-outs.

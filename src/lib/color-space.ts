@@ -55,6 +55,27 @@ export function hexToRgb(hex: string): [number, number, number] | null {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+// Display form of a stored "#rrggbb" hex: bare uppercase digits ("FF8800").
+// Storage keeps rgbToHex's lowercase "#rrggbb" so preset matching compares
+// one canonical form.
+export function displayHex(hex: string): string {
+  return hex.replace("#", "").toUpperCase();
+}
+
+// Expand a 1-3 digit hex fragment to 6 digits. 1 and 2 digits repeat to
+// fill ("d" → "dddddd", "3f" → "3f3f3f" — no CSS equivalent exists). 3
+// digits double per digit, matching CSS #rgb shorthand ("f80" → "ff8800",
+// NOT "f80f80"). Anything else returns null.
+export function expandHexShorthand(fragment: string): string | null {
+  if (!/^[0-9a-f]{1,3}$/i.test(fragment)) return null;
+  if (fragment.length === 3)
+    return fragment
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  return fragment.repeat(6 / fragment.length);
+}
+
 export type ColorPreset =
   | { name: string; special: "mono" }
   | { name: string; hex: string };

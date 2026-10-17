@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import {
   RiBookmarkLine,
   RiChat3Line,
@@ -16,6 +16,7 @@ import { linkifyText } from "@/lib/linkify";
 import { extractReplyHandles } from "@/lib/reply-handles";
 import { ArticleBlock, ArticleBlockPending } from "@/components/article-block";
 import { AuthorLink } from "@/components/author-link";
+import { CardVideo } from "@/components/card-video";
 import { MediaPlaceholder } from "@/components/media-placeholder";
 import { QuotedTweetCard } from "@/components/quoted-tweet-card";
 import { ReplyOrThreadPills } from "@/components/reply-pills";
@@ -37,12 +38,25 @@ import { cn } from "@/lib/utils";
 
 const TEXT_LIMIT = 280;
 
-export function BookmarkCard({
+// Memoized: BookmarkList re-renders on every scroll frame (setScrollY) and
+// on settle/viewport transitions; with stable props an unchanged card skips
+// its whole render — the text pipeline (expandTcoLinks / extractReplyHandles
+// / linkifyText) and date formatting included. Same rationale as
+// GalleryCard's memo. Selection, search, and lightbox state arrive via
+// contexts, which re-render their subscribers regardless of memo.
+export const BookmarkCard = memo(function BookmarkCard({
   bookmark,
   dimmedMediaUrls,
+  scrollSettled = true,
+  isInViewport = false,
 }: {
   bookmark: Bookmark;
   dimmedMediaUrls?: ReadonlySet<string>;
+  // Scroll-aware video mounting; both flags feed CardVideo. Defaults keep
+  // the mount-immediately behavior for non-virtualized callers
+  // (duplicates view).
+  scrollSettled?: boolean;
+  isInViewport?: boolean;
 }) {
   const {
     id,
@@ -81,10 +95,12 @@ export function BookmarkCard({
   const handleCardClick = (e: React.MouseEvent) => {
     // Skip when the click landed on an interactive descendant (buttons, links,
     // media with its own handler, checkboxes). Mirrors vanilla's closest() guard.
+    // [data-card-video] is CardVideo's poster stand-in during scroll — treated
+    // like the <video> it replaces so click behavior doesn't change mid-scroll.
     const target = e.target as HTMLElement;
     if (
       target.closest(
-        'a, button, video, [role="button"], [role="checkbox"], [data-slot="dropdown-menu-trigger"]'
+        'a, button, video, [data-card-video], [role="button"], [role="checkbox"], [data-slot="dropdown-menu-trigger"]'
       )
     ) {
       return;
@@ -165,6 +181,8 @@ export function BookmarkCard({
           <CardMedia
             media={media}
             dimmedUrls={dimmedMediaUrls}
+            scrollSettled={scrollSettled}
+            isInViewport={isInViewport}
             onOpen={(m) => {
               openLightbox(bookmark, m.url);
             }}
@@ -227,7 +245,7 @@ export function BookmarkCard({
       </div>
     </article>
   );
-}
+});
 
 function EngagementStat({ icon, value }: { icon: ReactNode; value: number }) {
   return (
@@ -241,10 +259,14 @@ function EngagementStat({ icon, value }: { icon: ReactNode; value: number }) {
 function CardMedia({
   media,
   dimmedUrls,
+  scrollSettled,
+  isInViewport,
   onOpen,
 }: {
   media: MediaItem[];
   dimmedUrls?: ReadonlySet<string>;
+  scrollSettled: boolean;
+  isInViewport: boolean;
   onOpen: (m: MediaItem) => void;
 }) {
   const items = media.slice(0, 4);
@@ -263,6 +285,8 @@ function CardMedia({
           media={m}
           solo={n === 1}
           dimmed={m.url ? (dimmedUrls?.has(m.url) ?? false) : false}
+          scrollSettled={scrollSettled}
+          isInViewport={isInViewport}
           onClick={(e) => {
             e.stopPropagation();
             onOpen(m);
@@ -277,11 +301,15 @@ function MediaThumb({
   media,
   solo,
   dimmed,
+  scrollSettled,
+  isInViewport,
   onClick,
 }: {
   media: MediaItem;
   solo: boolean;
   dimmed: boolean;
+  scrollSettled: boolean;
+  isInViewport: boolean;
   onClick: (e: React.MouseEvent) => void;
 }) {
   const ar = media.width && media.height ? `${media.width} / ${media.height}` : undefined;
@@ -305,22 +333,20 @@ function MediaThumb({
   if (media.type === "video" || media.type === "animated_gif") {
     // When autoplay is on: silent-loop preview with controls revealed on hover.
     // When off: paused at `poster` frame, controls always visible (touch devices
-    // can't hover). Either way, the card's onClick guard excludes `video`, so
-    // clicks here don't bubble to the lightbox — users open the lightbox by
-    // clicking elsewhere on the card.
+    // can't hover). Either way, the card's onClick guard excludes `video` (and
+    // CardVideo's poster stand-in), so clicks here don't bubble to the
+    // lightbox — users open the lightbox by clicking elsewhere on the card.
     return (
-      <video
-        src={media.url ?? undefined}
-        poster={media.thumb ?? undefined}
-        autoPlay={autoplay}
-        muted={autoplay}
-        loop={autoplay}
-        playsInline
-        preload="none"
+      <CardVideo
+        url={media.url}
+        poster={media.thumb}
+        autoplay={autoplay}
+        scrollSettled={scrollSettled}
+        isInViewport={isInViewport}
         controls={!autoplay}
-        onMouseEnter={autoplay ? (e) => (e.currentTarget.controls = true) : undefined}
-        onMouseLeave={autoplay ? (e) => (e.currentTarget.controls = false) : undefined}
-        className={cn("bg-muted h-full w-full object-cover", dimmed && "opacity-20")}
+        hoverControls={autoplay}
+        // box geometry only — CardVideo's layers apply object-cover inside
+        className={cn("bg-muted h-full w-full", dimmed && "opacity-20")}
         style={solo ? (ar ? { aspectRatio: ar } : undefined) : { minHeight: 0 }}
       />
     );
