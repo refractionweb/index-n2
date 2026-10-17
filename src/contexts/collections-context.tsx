@@ -32,16 +32,26 @@ export type Collection = {
   id: string;
   name: string;
   createdAt: string;
+  // Hide members from Home and Gallery (a per-collection archive). The
+  // collection's own tab always shows them; Archive is unaffected.
+  hidden: boolean;
   ids: ReadonlySet<string>;
 };
 
-type Wire = { id: string; name: string; createdAt: string; ids: string[] };
+type Wire = {
+  id: string;
+  name: string;
+  createdAt: string;
+  hidden?: boolean;
+  ids: string[];
+};
 
 type CollectionsValue = {
   collections: readonly Collection[];
   byId: ReadonlyMap<string, Collection>;
   create: (name: string) => Collection;
   rename: (id: string, name: string) => void;
+  setHidden: (id: string, hidden: boolean) => void;
   remove: (id: string) => void;
   add: (collectionId: string, bookmarkIds: string[]) => void;
   removeFrom: (collectionId: string, bookmarkIds: string[]) => void;
@@ -54,11 +64,23 @@ type CollectionsValue = {
 const CollectionsContext = createContext<CollectionsValue | null>(null);
 
 function fromWire(w: Wire): Collection {
-  return { id: w.id, name: w.name, createdAt: w.createdAt, ids: new Set(w.ids) };
+  return {
+    id: w.id,
+    name: w.name,
+    createdAt: w.createdAt,
+    hidden: w.hidden === true,
+    ids: new Set(w.ids),
+  };
 }
 
 function toWire(c: Collection): Wire {
-  return { id: c.id, name: c.name, createdAt: c.createdAt, ids: [...c.ids] };
+  return {
+    id: c.id,
+    name: c.name,
+    createdAt: c.createdAt,
+    hidden: c.hidden,
+    ids: [...c.ids],
+  };
 }
 
 function newId(): string {
@@ -130,6 +152,7 @@ export function CollectionsProvider({ children }: { children: ReactNode }) {
         id: newId(),
         name: name.trim(),
         createdAt: new Date().toISOString(),
+        hidden: false,
         ids: new Set(),
       };
       persist([...ref.current, c]);
@@ -143,6 +166,13 @@ export function CollectionsProvider({ children }: { children: ReactNode }) {
       const trimmed = name.trim();
       if (!trimmed) return;
       persist(ref.current.map((c) => (c.id === id ? { ...c, name: trimmed } : c)));
+    },
+    [persist],
+  );
+
+  const setHidden = useCallback(
+    (id: string, hidden: boolean) => {
+      persist(ref.current.map((c) => (c.id === id ? { ...c, hidden } : c)));
     },
     [persist],
   );
@@ -203,13 +233,14 @@ export function CollectionsProvider({ children }: { children: ReactNode }) {
       byId,
       create,
       rename,
+      setHidden,
       remove,
       add,
       removeFrom,
       promptCreate,
       promptRename,
     }),
-    [collections, byId, create, rename, remove, add, removeFrom, promptCreate, promptRename],
+    [collections, byId, create, rename, setHidden, remove, add, removeFrom, promptCreate, promptRename],
   );
 
   return (
@@ -304,6 +335,20 @@ export function useCollections(): CollectionsValue {
   const ctx = useContext(CollectionsContext);
   if (!ctx) throw new Error("useCollections requires <CollectionsProvider>");
   return ctx;
+}
+
+// Union of member ids across collections marked hidden. Home and Gallery
+// exclude these; see lib/scope.ts.
+const EMPTY: ReadonlySet<string> = new Set();
+export function useHiddenByCollections(): ReadonlySet<string> {
+  const { collections } = useCollections();
+  return useMemo(() => {
+    const hidden = collections.filter((c) => c.hidden);
+    if (hidden.length === 0) return EMPTY;
+    const out = new Set<string>();
+    for (const c of hidden) for (const id of c.ids) out.add(id);
+    return out;
+  }, [collections]);
 }
 
 // Member set of the collection the active tab shows, or null on fixed tabs.

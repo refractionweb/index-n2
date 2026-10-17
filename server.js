@@ -1514,6 +1514,8 @@ const server = createServer((req, res) => {
   // Same storage contract as /api/archive: the client owns the full document
   // and POSTs it whole; the server validates shape and atomically replaces
   // collections.json. Membership is a set — order is not meaningful.
+  // `hidden` excludes the collection's members from Home/Gallery (per-
+  // collection archive); the collection tab itself always shows them.
   if (path === "/api/collections") {
     const collectionsPath = join(CACHE_DIR, "collections.json");
     if (req.method === "GET") {
@@ -1560,6 +1562,7 @@ const server = createServer((req, res) => {
                 isId(c.id) &&
                 typeof c.name === "string" && c.name.length > 0 && c.name.length <= 200 &&
                 typeof c.createdAt === "string" && c.createdAt.length < 64 &&
+                (c.hidden === undefined || typeof c.hidden === "boolean") &&
                 Array.isArray(c.ids) && c.ids.every(isId),
             ) &&
             new Set(parsed.map((c) => c.id)).size === parsed.length;
@@ -1574,6 +1577,7 @@ const server = createServer((req, res) => {
             id: c.id,
             name: c.name,
             createdAt: c.createdAt,
+            hidden: c.hidden === true,
             ids: [...new Set(c.ids)],
           }));
           if (!existsSync(join(CACHE_DIR))) mkdirSync(join(CACHE_DIR), { recursive: true });

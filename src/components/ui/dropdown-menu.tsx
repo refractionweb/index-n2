@@ -2,7 +2,7 @@ import * as React from "react"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
-import { RiCheckLine, RiArrowRightSLine } from "@remixicon/react"
+import { RiCheckLine, RiArrowRightSLine, RiSubtractLine } from "@remixicon/react"
 
 function DropdownMenu({
   ...props
@@ -104,8 +104,10 @@ function DropdownMenuCheckboxItem({
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
         <DropdownMenuPrimitive.ItemIndicator>
-          <RiCheckLine
-          />
+          {/* Override (see .workfiles/shadcn-overrides.md): stock renders a
+              check for `indeterminate` too; a minus is the tri-state
+              convention. */}
+          {checked === "indeterminate" ? <RiSubtractLine /> : <RiCheckLine />}
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}

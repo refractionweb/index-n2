@@ -1,5 +1,7 @@
 import type { Bookmark } from "@/types/bookmark";
 
+const EMPTY_SET: ReadonlySet<string> = new Set();
+
 // Single source of truth for "what's in scope before per-filter logic runs."
 // Three hooks (useFilteredBookmarks, useFilteredGallery, useFilterCountSource)
 // previously inlined this same partitioning, and the count source's copy
@@ -21,18 +23,25 @@ import type { Bookmark } from "@/types/bookmark";
 // Collection partitioning: when `collectionIds` is given the scope is that
 // member set, regardless of archive state — membership is explicit, so an
 // archived bookmark still shows in a collection it was added to.
+//
+// `hiddenByCollections`: members of collections marked "Hide from Home".
+// Applied only on the home rule (Home, Gallery) — the archive tab and
+// collection tabs are explicit views and ignore it.
 export function getScopedBookmarks(
   bookmarks: Bookmark[],
   hiddenIds: ReadonlySet<string>,
   archived: boolean,
   hideUnfetched: boolean,
   collectionIds: ReadonlySet<string> | null = null,
+  hiddenByCollections: ReadonlySet<string> = EMPTY_SET,
 ): Bookmark[] {
   let visible = collectionIds
     ? bookmarks.filter((b) => collectionIds.has(b.id))
     : archived
       ? bookmarks.filter((b) => hiddenIds.has(b.id))
-      : bookmarks.filter((b) => !hiddenIds.has(b.id));
+      : bookmarks.filter(
+          (b) => !hiddenIds.has(b.id) && !hiddenByCollections.has(b.id),
+        );
   if (hideUnfetched) {
     visible = visible.filter((b) => {
       if (b.media.some((m) => !m.url)) return false;

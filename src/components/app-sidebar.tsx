@@ -50,8 +50,10 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
@@ -118,8 +120,13 @@ export function AppSidebar() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [rebuildOpen, setRebuildOpen] = useState(false);
-  const { collections, remove: removeCollection, promptCreate, promptRename } =
-    useCollections();
+  const {
+    collections,
+    remove: removeCollection,
+    setHidden: setCollectionHidden,
+    promptCreate,
+    promptRename,
+  } = useCollections();
   // Collection pending delete confirmation (its id), or null.
   const [deleteCollectionId, setDeleteCollectionId] = useState<string | null>(null);
   const deleteTarget = collections.find((c) => c.id === deleteCollectionId) ?? null;
@@ -317,10 +324,11 @@ export function AppSidebar() {
                       <RiFolderLine />
                       <span>{c.name}</span>
                     </SidebarMenuButton>
-                    {/* Count and the hover "⋯" share the right edge; the
-                        count yields while the item is hovered or its menu
-                        is open. */}
-                    <SidebarMenuBadge className="tabular-nums group-hover/menu-item:opacity-0 group-has-data-[state=open]/menu-item:opacity-0">
+                    {/* Count and the hover "⋮" share the right-1 slot. The
+                        badge hides under exactly the conditions that show
+                        the action (SidebarMenuAction showOnHover: hover,
+                        focus-within, menu open, and always below md). */}
+                    <SidebarMenuBadge className="max-md:hidden group-hover/menu-item:hidden group-focus-within/menu-item:hidden group-has-data-[state=open]/menu-item:hidden">
                       {c.ids.size}
                     </SidebarMenuBadge>
                     <DropdownMenu>
@@ -329,7 +337,14 @@ export function AppSidebar() {
                           <RiMore2Line />
                         </SidebarMenuAction>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent side="right" align="start">
+                      <DropdownMenuContent side="right" align="start" className="min-w-[160px]">
+                        <DropdownMenuCheckboxItem
+                          checked={c.hidden}
+                          onCheckedChange={(v) => setCollectionHidden(c.id, v === true)}
+                        >
+                          Hide from Home
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => promptRename(c.id)}>
                           <RiPencilLine />
                           Rename

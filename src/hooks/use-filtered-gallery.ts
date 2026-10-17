@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useBookmarks } from "@/contexts/bookmarks-context";
+import { useHiddenByCollections } from "@/contexts/collections-context";
 import { useFilter } from "@/contexts/filter-context";
 import { useHidden } from "@/contexts/hidden-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -17,6 +18,7 @@ export function useFilteredGallery(): GalleryItem[] {
   const { hiddenIds } = useHidden();
   const { activeTab } = useTab();
   const { settings } = useSettings();
+  const hiddenByCollections = useHiddenByCollections();
 
   return useMemo(() => {
     if (!bookmarks || activeTab !== "gallery") return [];
@@ -28,7 +30,9 @@ export function useFilteredGallery(): GalleryItem[] {
       hiddenIds,
       false,
       settings.hideUnfetched,
+      null,
+      hiddenByCollections,
     );
     return filterAndFlattenGallery(scoped, state);
-  }, [bookmarks, state, hiddenIds, activeTab, settings.hideUnfetched]);
+  }, [bookmarks, state, hiddenIds, activeTab, settings.hideUnfetched, hiddenByCollections]);
 }

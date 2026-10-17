@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -41,7 +42,7 @@ export function SelectionBar() {
   const { byId } = useBookmarks();
   const { archive, restore } = useHidden();
   const { activeTab } = useTab();
-  const { collections, add, promptCreate } = useCollections();
+  const { collections, add, removeFrom, promptCreate } = useCollections();
   const activeCollection = useActiveCollection();
   const { info } = useAppInfo();
   const filtered = useFilteredBookmarks();
@@ -82,6 +83,17 @@ export function SelectionBar() {
 
   if (selectedIds.size === 0) return null;
 
+  // Membership of the selection in a collection: all / none / some. Mirrors
+  // the per-card menu's checkbox, extended to a set. Clicking a fully
+  // checked item removes the whole selection; anything else adds it.
+  const membership = (ids: ReadonlySet<string>): boolean | "indeterminate" => {
+    let inside = 0;
+    for (const id of selectedIds) if (ids.has(id)) inside++;
+    if (inside === 0) return false;
+    if (inside === selectedIds.size) return true;
+    return "indeterminate";
+  };
+
   const title = activeCollection?.name ?? "Selection";
   const n = exportList.length;
   const copy = (text: string, what: string) => {
@@ -107,25 +119,30 @@ export function SelectionBar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[180px]">
-              {collections.map((c) => (
-                <DropdownMenuItem
-                  key={c.id}
-                  onSelect={() => {
-                    add(c.id, [...selectedIds]);
-                    clear();
-                  }}
-                >
-                  {c.name}
-                </DropdownMenuItem>
-              ))}
+              {collections.map((c) => {
+                const state = membership(c.ids);
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={c.id}
+                    checked={state}
+                    // Keep the menu open so several collections can be
+                    // toggled in one pass; the selection stays as well.
+                    onSelect={(e) => e.preventDefault()}
+                    onCheckedChange={() =>
+                      state === true
+                        ? removeFrom(c.id, [...selectedIds])
+                        : add(c.id, [...selectedIds])
+                    }
+                  >
+                    {c.name}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
               {collections.length > 0 && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onSelect={() => {
                   const ids = [...selectedIds];
-                  promptCreate((c) => {
-                    add(c.id, ids);
-                    clear();
-                  });
+                  promptCreate((c) => add(c.id, ids));
                 }}
               >
                 <RiAddLine />

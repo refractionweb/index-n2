@@ -2,7 +2,10 @@ import { BookmarkList } from "@/components/bookmark-list";
 import { CopyableCode } from "@/components/copyable-code";
 import { StatusMessage } from "@/components/status-message";
 import { useBookmarks } from "@/contexts/bookmarks-context";
-import { useActiveCollection } from "@/contexts/collections-context";
+import {
+  useActiveCollection,
+  useHiddenByCollections,
+} from "@/contexts/collections-context";
 import { useFilter } from "@/contexts/filter-context";
 import { useHidden } from "@/contexts/hidden-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -19,6 +22,7 @@ export function BookmarkGrid() {
   const { activeTab, setTab } = useTab();
   const filtered = useFilteredBookmarks();
   const activeCollection = useActiveCollection();
+  const hiddenByCollections = useHiddenByCollections();
 
   if (loading) {
     return (
@@ -73,6 +77,8 @@ export function BookmarkGrid() {
         hiddenIds,
         otherIsArchive,
         settings.hideUnfetched,
+        null,
+        hiddenByCollections,
       );
       const otherCount = filterBookmarks(otherScope, filterState).length;
       const otherLabel = otherIsArchive ? "Archive" : "Home";
