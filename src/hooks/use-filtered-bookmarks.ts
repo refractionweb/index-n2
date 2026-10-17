@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useBookmarks } from "@/contexts/bookmarks-context";
+import { useActiveCollection } from "@/contexts/collections-context";
 import { useFilter } from "@/contexts/filter-context";
 import { useHidden } from "@/contexts/hidden-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -19,6 +20,7 @@ export function useFilteredBookmarks(): Bookmark[] {
   const { hiddenIds } = useHidden();
   const { activeTab } = useTab();
   const { settings } = useSettings();
+  const collectionIds = useActiveCollection()?.ids ?? null;
 
   return useMemo(() => {
     if (!bookmarks) return [];
@@ -27,7 +29,8 @@ export function useFilteredBookmarks(): Bookmark[] {
       hiddenIds,
       activeTab === "archive",
       settings.hideUnfetched,
+      collectionIds,
     );
     return filterBookmarks(scoped, state);
-  }, [bookmarks, state, hiddenIds, activeTab, settings.hideUnfetched]);
+  }, [bookmarks, state, hiddenIds, activeTab, settings.hideUnfetched, collectionIds]);
 }

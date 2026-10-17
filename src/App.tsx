@@ -16,6 +16,7 @@ import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sideb
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppInfoProvider, useAppInfo } from "@/contexts/app-info-context";
 import { BookmarksProvider } from "@/contexts/bookmarks-context";
+import { CollectionsProvider } from "@/contexts/collections-context";
 import { FilterProvider, useFilter } from "@/contexts/filter-context";
 import { GalleryZoomProvider } from "@/contexts/gallery-zoom-context";
 import { HiddenProvider } from "@/contexts/hidden-context";
@@ -24,6 +25,7 @@ import { SelectionProvider, useSelection } from "@/contexts/selection-context";
 import { SettingsProvider } from "@/contexts/settings-context";
 import { TabProvider, useTab } from "@/contexts/tab-context";
 import { useFilteredBookmarks } from "@/hooks/use-filtered-bookmarks";
+import { isGridTab } from "@/lib/tabs";
 
 // Provider stack split into core vs app:
 // - CoreProviders are infrastructure that works regardless of ft (theme,
@@ -51,11 +53,13 @@ function AppProviders({ children }: { children: ReactNode }) {
       <HiddenProvider>
         <FilterProvider>
           <TabProvider>
-            <GalleryZoomProvider>
-              <SelectionProvider>
-                <LightboxProvider>{children}</LightboxProvider>
-              </SelectionProvider>
-            </GalleryZoomProvider>
+            <CollectionsProvider>
+              <GalleryZoomProvider>
+                <SelectionProvider>
+                  <LightboxProvider>{children}</LightboxProvider>
+                </SelectionProvider>
+              </GalleryZoomProvider>
+            </CollectionsProvider>
           </TabProvider>
         </FilterProvider>
       </HiddenProvider>
@@ -143,11 +147,7 @@ function ScrollContent() {
   const { target: lightboxTarget } = useLightbox();
   const { state: filterState } = useFilter();
   const filtered = useFilteredBookmarks();
-  const isGrid =
-    activeTab === "home" ||
-    activeTab === "gallery" ||
-    activeTab === "archive";
-
+  const isGrid = isGridTab(activeTab);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -161,7 +161,8 @@ function ScrollContent() {
         (e.metaKey || e.ctrlKey) &&
         e.key === "a" &&
         !lightboxTarget &&
-        (activeTab === "home" || activeTab === "archive")
+        activeTab !== "gallery" &&
+        isGridTab(activeTab)
       ) {
         const t = e.target as HTMLElement;
         if (t?.tagName === "INPUT" || t?.tagName === "TEXTAREA" || t?.isContentEditable) return;

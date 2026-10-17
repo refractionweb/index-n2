@@ -10,11 +10,10 @@ import {
   RiFilter3Line,
   RiFileCopyLine,
   RiHeart3Line,
-  RiInboxArchiveLine,
-  RiInboxUnarchiveLine,
   RiMoreFill,
   RiRepeatLine,
 } from "@remixicon/react";
+import { BookmarkMenuItems } from "@/components/bookmark-menu-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -28,7 +27,6 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -603,13 +601,9 @@ function LightboxCardPanel({
   } = bookmark;
   const { state: filterState, dispatch } = useFilter();
   const { close } = useLightbox();
-  const { archive, restore, isHidden } = useHidden();
+  const { isHidden } = useHidden();
   const { activeTab } = useTab();
   const search = normalizeSearchTerm(filterState.search);
-  const restoring = isHidden(id);
-  const copyLink = () => {
-    void navigator.clipboard.writeText(url);
-  };
   const expanded = expandTcoLinks(text || "", links);
   const { handles, rest } = extractReplyHandles(expanded);
 
@@ -717,16 +711,7 @@ function LightboxCardPanel({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={copyLink}>
-              <RiFileCopyLine />
-              Copy link
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => (restoring ? restore([id]) : archive([id]))}
-            >
-              {restoring ? <RiInboxUnarchiveLine /> : <RiInboxArchiveLine />}
-              {restoring ? "Restore" : "Archive"}
-            </DropdownMenuItem>
+            <BookmarkMenuItems bookmark={bookmark} />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

@@ -1365,6 +1365,9 @@ const server = createServer((req, res) => {
       author: pkg.author,
       ft,
       hasData,
+      // Absolute media directory so client-side exports (markdown) can emit
+      // local file paths an agent with shell access can open directly.
+      mediaDir: join(FT, "media"),
     }));
     return;
   }
@@ -1494,6 +1497,91 @@ const server = createServer((req, res) => {
           res.end('{"ok":true}');
         } catch (e) {
           console.error("POST /api/archive failed:", e);
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end('{"error":"internal server error"}');
+          }
+        }
+      });
+      return;
+    }
+    res.writeHead(405, { "Allow": "GET, POST", "Content-Type": "application/json" });
+    res.end('{"error":"method not allowed"}');
+    return;
+  }
+
+  // API: collections (user-named, non-exclusive groupings of bookmark IDs).
+  // Same storage contract as /api/archive: the client owns the full document
+  // and POSTs it whole; the server validates shape and atomically replaces
+  // collections.json. Membership is a set — order is not meaningful.
+  if (path === "/api/collections") {
+    const collectionsPath = join(CACHE_DIR, "collections.json");
+    if (req.method === "GET") {
+      let list = [];
+      if (existsSync(collectionsPath)) {
+        try { list = JSON.parse(readFileSync(collectionsPath, "utf-8")); }
+        catch (e) { console.error("collections.json unreadable, returning empty:", e.message); }
+      }
+      if (!Array.isArray(list)) list = [];
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(list));
+      return;
+    }
+    if (req.method === "POST") {
+      if (!requireSameOrigin(req, res)) return;
+      const MAX_BODY = 4 * 1024 * 1024;
+      let body = "";
+      let aborted = false;
+      req.on("data", c => {
+        if (aborted) return;
+        body += c;
+        if (body.length > MAX_BODY) {
+          aborted = true;
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end('{"error":"payload too large"}');
+          req.destroy();
+        }
+      });
+      req.on("end", () => {
+        try {
+          if (aborted) return;
+          let parsed;
+          try { parsed = JSON.parse(body); } catch {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end('{"error":"invalid json"}');
+            return;
+          }
+          const isId = (x) => typeof x === "string" && x.length > 0 && x.length < 64;
+          const valid =
+            Array.isArray(parsed) &&
+            parsed.every(
+              (c) =>
+                c && typeof c === "object" && !Array.isArray(c) &&
+                isId(c.id) &&
+                typeof c.name === "string" && c.name.length > 0 && c.name.length <= 200 &&
+                typeof c.createdAt === "string" && c.createdAt.length < 64 &&
+                Array.isArray(c.ids) && c.ids.every(isId),
+            ) &&
+            new Set(parsed.map((c) => c.id)).size === parsed.length;
+          if (!valid) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end('{"error":"expected {id,name,createdAt,ids}[]"}');
+            return;
+          }
+          // Re-serialize from the validated fields only, so unknown keys
+          // never land on disk.
+          const clean = parsed.map((c) => ({
+            id: c.id,
+            name: c.name,
+            createdAt: c.createdAt,
+            ids: [...new Set(c.ids)],
+          }));
+          if (!existsSync(join(CACHE_DIR))) mkdirSync(join(CACHE_DIR), { recursive: true });
+          atomicWriteFileSync(collectionsPath, JSON.stringify(clean));
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end('{"ok":true}');
+        } catch (e) {
+          console.error("POST /api/collections failed:", e);
           if (!res.headersSent) {
             res.writeHead(500, { "Content-Type": "application/json" });
             res.end('{"error":"internal server error"}');

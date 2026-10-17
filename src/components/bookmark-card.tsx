@@ -2,10 +2,7 @@ import { memo, type ReactNode } from "react";
 import {
   RiBookmarkLine,
   RiChat3Line,
-  RiFileCopyLine,
   RiHeart3Line,
-  RiInboxArchiveLine,
-  RiInboxUnarchiveLine,
   RiMoreFill,
   RiRepeatLine,
 } from "@remixicon/react";
@@ -16,6 +13,7 @@ import { linkifyText } from "@/lib/linkify";
 import { extractReplyHandles } from "@/lib/reply-handles";
 import { ArticleBlock, ArticleBlockPending } from "@/components/article-block";
 import { AuthorLink } from "@/components/author-link";
+import { BookmarkMenuItems } from "@/components/bookmark-menu-items";
 import { CardVideo } from "@/components/card-video";
 import { MediaPlaceholder } from "@/components/media-placeholder";
 import { QuotedTweetCard } from "@/components/quoted-tweet-card";
@@ -25,7 +23,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useFilter } from "@/contexts/filter-context";
@@ -76,21 +73,16 @@ export const BookmarkCard = memo(function BookmarkCard({
   } = bookmark;
   const { open: openLightbox } = useLightbox();
   const { isSelected, toggle } = useSelection();
-  const { archive, restore, isHidden } = useHidden();
+  const { isHidden } = useHidden();
   const { activeTab } = useTab();
   const { state: filterState } = useFilter();
   const search = normalizeSearchTerm(filterState.search);
-  const restoring = isHidden(id);
   const selected = isSelected(id);
 
   const expandedText = expandTcoLinks(text || "", links);
   const { handles, rest } = extractReplyHandles(expandedText);
   const truncated = rest.length > TEXT_LIMIT;
   const displayText = truncated ? rest.slice(0, TEXT_LIMIT) + "…" : rest;
-
-  const copyLink = () => {
-    void navigator.clipboard.writeText(url);
-  };
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Skip when the click landed on an interactive descendant (buttons, links,
@@ -226,18 +218,7 @@ export const BookmarkCard = memo(function BookmarkCard({
                 align="end"
                 onClick={(e) => e.stopPropagation()}
               >
-                <DropdownMenuItem onSelect={copyLink}>
-                  <RiFileCopyLine />
-                  Copy link
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() =>
-                    restoring ? restore([id]) : archive([id])
-                  }
-                >
-                  {restoring ? <RiInboxUnarchiveLine /> : <RiInboxArchiveLine />}
-                  {restoring ? "Restore" : "Archive"}
-                </DropdownMenuItem>
+                <BookmarkMenuItems bookmark={bookmark} />
               </DropdownMenuContent>
             </DropdownMenu>
           </footer>

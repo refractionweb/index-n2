@@ -69,6 +69,7 @@ import {
   type TypeFilter,
 } from "@/contexts/filter-context";
 import { useFilterCountSource } from "@/hooks/use-filter-count-source";
+import { isGridTab } from "@/lib/tabs";
 import { useFilteredBookmarks } from "@/hooks/use-filtered-bookmarks";
 import { useFilteredGallery } from "@/hooks/use-filtered-gallery";
 import { useSearchHistory } from "@/hooks/use-search-history";
@@ -132,10 +133,7 @@ export function TopBar() {
   // return null; App.tsx's scroll container pads pt-14 instead so the 56px
   // top reservation lives inside the scroll viewport — scrolls with content
   // rather than sitting permanently outside `overflow-auto`.
-  const isGrid =
-    activeTab === "home" ||
-    isGallery ||
-    activeTab === "archive";
+  const isGrid = isGridTab(activeTab);
   const resultCount = isGallery ? gallery.length : filtered.length;
   const resultLabel = isGallery ? "media" : "results";
 

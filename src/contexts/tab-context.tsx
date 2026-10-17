@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { TabId } from "@/components/app-sidebar";
+import type { TabId } from "@/lib/tabs";
 
 type TabValue = {
   activeTab: TabId;

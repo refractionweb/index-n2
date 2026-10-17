@@ -33,6 +33,9 @@ export type AppInfo = {
   author?: string | { name?: string; email?: string; url?: string };
   ft: FtInfo | null;
   hasData: boolean;
+  // Absolute path of ft's media directory; used by Markdown export to emit
+  // local file paths. Absent on older servers.
+  mediaDir?: string;
 };
 
 type AppInfoState = {

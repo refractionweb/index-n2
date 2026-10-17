@@ -2,6 +2,7 @@ import { BookmarkList } from "@/components/bookmark-list";
 import { CopyableCode } from "@/components/copyable-code";
 import { StatusMessage } from "@/components/status-message";
 import { useBookmarks } from "@/contexts/bookmarks-context";
+import { useActiveCollection } from "@/contexts/collections-context";
 import { useFilter } from "@/contexts/filter-context";
 import { useHidden } from "@/contexts/hidden-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -17,6 +18,7 @@ export function BookmarkGrid() {
   const { settings } = useSettings();
   const { activeTab, setTab } = useTab();
   const filtered = useFilteredBookmarks();
+  const activeCollection = useActiveCollection();
 
   if (loading) {
     return (
@@ -54,6 +56,14 @@ export function BookmarkGrid() {
       filterState.search !== "";
 
     if (hasFilters) {
+      // Collections have no "opposite scope" to point at.
+      if (activeCollection) {
+        return (
+          <StatusMessage>
+            <p>No bookmarks match the current filters.</p>
+          </StatusMessage>
+        );
+      }
       // Same filters applied against the opposite scope. Filter state is
       // shared across tabs (one FilterContext), so clicking the link only
       // needs to switch tab — the filters travel for free.
@@ -83,6 +93,16 @@ export function BookmarkGrid() {
               </button>
             </p>
           )}
+        </StatusMessage>
+      );
+    }
+    if (activeCollection) {
+      return (
+        <StatusMessage>
+          <p className="text-foreground">Collection is empty.</p>
+          <p className="mt-1">
+            Select bookmarks, then click Collection in the selection bar.
+          </p>
         </StatusMessage>
       );
     }

@@ -1,22 +1,59 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  RiAddLine,
   RiCloseLine,
+  RiDownloadLine,
+  RiFileCopyLine,
+  RiFolderAddLine,
+  RiHashtag,
   RiInboxArchiveLine,
   RiInboxUnarchiveLine,
+  RiLinkM,
+  RiMarkdownLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SelectionStack } from "@/components/selection-stack";
+import { useAppInfo } from "@/contexts/app-info-context";
 import { useBookmarks } from "@/contexts/bookmarks-context";
+import { useActiveCollection, useCollections } from "@/contexts/collections-context";
 import { useHidden } from "@/contexts/hidden-context";
 import { useSelection } from "@/contexts/selection-context";
 import { useTab } from "@/contexts/tab-context";
+import { useFilteredBookmarks } from "@/hooks/use-filtered-bookmarks";
+import {
+  downloadText,
+  exportIds,
+  exportLinks,
+  exportMarkdown,
+  slugify,
+} from "@/lib/export";
+import type { Bookmark } from "@/types/bookmark";
 
 export function SelectionBar() {
   const { selectedIds, clear } = useSelection();
   const { byId } = useBookmarks();
   const { archive, restore } = useHidden();
   const { activeTab } = useTab();
+  const { collections, add, promptCreate } = useCollections();
+  const activeCollection = useActiveCollection();
+  const { info } = useAppInfo();
+  const filtered = useFilteredBookmarks();
   const restoring = activeTab === "archive";
+  // Transient status shown in place of the count after a copy. No toast
+  // surface exists; the bar's own label is the status line.
+  const [status, setStatus] = useState<string | null>(null);
+  useEffect(() => {
+    if (!status) return;
+    const t = setTimeout(() => setStatus(null), 1500);
+    return () => clearTimeout(t);
+  }, [status]);
 
   // Selection (click) order. `selectedIds` is a Set that preserves insertion
   // order, so the most-recently-selected id is always last — which is what
@@ -30,16 +67,101 @@ export function SelectionBar() {
     [selectedIds, byId]
   );
 
+  // Export order follows the view (sort + filters), so a file reads the way
+  // the grid does. Selected items no longer in view (filters changed after
+  // selecting) are appended in selection order.
+  const exportList = useMemo((): Bookmark[] => {
+    const inView = filtered.filter((b) => selectedIds.has(b.id));
+    const seen = new Set(inView.map((b) => b.id));
+    const rest = orderedIds
+      .filter((id) => !seen.has(id))
+      .map((id) => byId.get(id))
+      .filter((b): b is Bookmark => b !== undefined);
+    return [...inView, ...rest];
+  }, [filtered, selectedIds, orderedIds, byId]);
+
   if (selectedIds.size === 0) return null;
 
+  const title = activeCollection?.name ?? "Selection";
+  const n = exportList.length;
+  const copy = (text: string, what: string) => {
+    void navigator.clipboard.writeText(text);
+    setStatus(`Copied ${n} ${what}`);
+  };
+  const markdown = () =>
+    exportMarkdown(exportList, { title, mediaDir: info?.mediaDir ?? null });
+
   return (
-    <div className="pointer-events-none sticky bottom-4 z-50 mx-auto flex w-full max-w-[600px] px-3">
+    <div className="pointer-events-none sticky bottom-4 z-50 mx-auto flex w-full max-w-[680px] px-3">
       <div className="bg-card text-card-foreground pointer-events-auto flex h-[52px] w-full items-center gap-3.5 rounded-lg border py-3 pr-3 pl-3.5 shadow-lg">
         <SelectionStack ids={orderedIds} byId={byId} />
         <span className="flex-1 text-sm tabular-nums whitespace-nowrap">
-          {selectedIds.size} selected
+          {status ?? `${selectedIds.size} selected`}
         </span>
         <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <RiFolderAddLine />
+                <span>Collection</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[180px]">
+              {collections.map((c) => (
+                <DropdownMenuItem
+                  key={c.id}
+                  onSelect={() => {
+                    add(c.id, [...selectedIds]);
+                    clear();
+                  }}
+                >
+                  {c.name}
+                </DropdownMenuItem>
+              ))}
+              {collections.length > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuItem
+                onSelect={() => {
+                  const ids = [...selectedIds];
+                  promptCreate((c) => {
+                    add(c.id, ids);
+                    clear();
+                  });
+                }}
+              >
+                <RiAddLine />
+                New collection…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <RiFileCopyLine />
+                <span>Copy</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[180px]">
+              <DropdownMenuItem onSelect={() => copy(exportIds(exportList), "IDs")}>
+                <RiHashtag />
+                IDs
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => copy(exportLinks(exportList), "links")}>
+                <RiLinkM />
+                Links
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => copy(markdown(), "as Markdown")}>
+                <RiMarkdownLine />
+                Markdown
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => downloadText(`${slugify(title)}.md`, markdown())}
+              >
+                <RiDownloadLine />
+                Save Markdown
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
             size="sm"

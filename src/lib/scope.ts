@@ -17,15 +17,22 @@ import type { Bookmark } from "@/types/bookmark";
 // hidden. Gallery and other non-archive tabs follow the home rule. The
 // boolean `archived` parameter is the discriminator — caller derives it from
 // `activeTab === "archive"`.
+//
+// Collection partitioning: when `collectionIds` is given the scope is that
+// member set, regardless of archive state — membership is explicit, so an
+// archived bookmark still shows in a collection it was added to.
 export function getScopedBookmarks(
   bookmarks: Bookmark[],
   hiddenIds: ReadonlySet<string>,
   archived: boolean,
   hideUnfetched: boolean,
+  collectionIds: ReadonlySet<string> | null = null,
 ): Bookmark[] {
-  let visible = archived
-    ? bookmarks.filter((b) => hiddenIds.has(b.id))
-    : bookmarks.filter((b) => !hiddenIds.has(b.id));
+  let visible = collectionIds
+    ? bookmarks.filter((b) => collectionIds.has(b.id))
+    : archived
+      ? bookmarks.filter((b) => hiddenIds.has(b.id))
+      : bookmarks.filter((b) => !hiddenIds.has(b.id));
   if (hideUnfetched) {
     visible = visible.filter((b) => {
       if (b.media.some((m) => !m.url)) return false;

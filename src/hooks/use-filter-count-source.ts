@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useBookmarks } from "@/contexts/bookmarks-context";
+import { useActiveCollection } from "@/contexts/collections-context";
 import { useFilter, type FilterState } from "@/contexts/filter-context";
 import { useHidden } from "@/contexts/hidden-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -40,6 +41,7 @@ export function useFilterCountSource(excludeDimension: FilterDimension): {
   const { hiddenIds } = useHidden();
   const { activeTab } = useTab();
   const { settings } = useSettings();
+  const collectionIds = useActiveCollection()?.ids ?? null;
 
   return useMemo(() => {
     const isGallery = activeTab === "gallery";
@@ -55,6 +57,7 @@ export function useFilterCountSource(excludeDimension: FilterDimension): {
       hiddenIds,
       activeTab === "archive",
       settings.hideUnfetched,
+      collectionIds,
     );
 
     const partial = clearDimension(state, excludeDimension);
@@ -71,7 +74,7 @@ export function useFilterCountSource(excludeDimension: FilterDimension): {
       galleryItems: [],
       isGallery,
     };
-  }, [bookmarks, state, hiddenIds, activeTab, excludeDimension, settings.hideUnfetched]);
+  }, [bookmarks, state, hiddenIds, activeTab, excludeDimension, settings.hideUnfetched, collectionIds]);
 }
 
 function clearDimension(

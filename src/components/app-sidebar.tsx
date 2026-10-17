@@ -1,12 +1,16 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
+  RiAddLine,
   RiArchiveLine,
+  RiDeleteBinLine,
   RiFileCopyLine,
+  RiFolderLine,
   RiGalleryLine,
   RiHomeLine,
   RiImageDownloadLine,
   RiMore2Line,
+  RiPencilLine,
   RiPuzzleLine,
   RiRefreshLine,
   RiRestartLine,
@@ -18,9 +22,13 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupAction,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
@@ -55,17 +63,14 @@ import {
 } from "@/components/ui/tooltip";
 import { useAppInfo, type FtClientStatus } from "@/contexts/app-info-context";
 import { useBookmarks } from "@/contexts/bookmarks-context";
+import { useCollections } from "@/contexts/collections-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useTab } from "@/contexts/tab-context";
 import { useSync } from "@/hooks/use-sync";
+import { collectionTab, type TabId } from "@/lib/tabs";
 import { cn } from "@/lib/utils";
 
-export type TabId =
-  | "home"
-  | "gallery"
-  | "archive"
-  | "duplicates"
-  | "settings";
+export type { TabId } from "@/lib/tabs";
 
 type Tab = {
   id: TabId;
@@ -113,6 +118,11 @@ export function AppSidebar() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [rebuildOpen, setRebuildOpen] = useState(false);
+  const { collections, remove: removeCollection, promptCreate, promptRename } =
+    useCollections();
+  // Collection pending delete confirmation (its id), or null.
+  const [deleteCollectionId, setDeleteCollectionId] = useState<string | null>(null);
+  const deleteTarget = collections.find((c) => c.id === deleteCollectionId) ?? null;
   // Pre-launch warning shown when a click is about to fire an unbounded media
   // run (Sync with skipMedia=off, or Fetch Media with mediaFetchLimit=0). Same
   // shared suppression as `noLimitWarningSuppressed`. `kind` decides which
@@ -277,6 +287,65 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Collections</SidebarGroupLabel>
+          {/* top-2.5: the preset trims SidebarGroup to py-1 but keeps the
+              action's upstream top-3.5, which was centered on a py-2 group.
+              Re-center on the h-8 label. See .workfiles/shadcn-overrides.md. */}
+          <SidebarGroupAction
+            className="top-2.5"
+            aria-label="New collection"
+            title="New collection"
+            onClick={() => promptCreate()}
+          >
+            <RiAddLine />
+          </SidebarGroupAction>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {collections.map((c) => {
+                const tab = collectionTab(c.id);
+                return (
+                  <SidebarMenuItem key={c.id}>
+                    <SidebarMenuButton
+                      isActive={tab === activeTab}
+                      tooltip={c.name}
+                      onClick={() => setTab(tab)}
+                    >
+                      <RiFolderLine />
+                      <span>{c.name}</span>
+                    </SidebarMenuButton>
+                    {/* Count and the hover "⋯" share the right edge; the
+                        count yields while the item is hovered or its menu
+                        is open. */}
+                    <SidebarMenuBadge className="tabular-nums group-hover/menu-item:opacity-0 group-has-data-[state=open]/menu-item:opacity-0">
+                      {c.ids.size}
+                    </SidebarMenuBadge>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <SidebarMenuAction showOnHover aria-label={`Actions for ${c.name}`}>
+                          <RiMore2Line />
+                        </SidebarMenuAction>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="right" align="start">
+                        <DropdownMenuItem onSelect={() => promptRename(c.id)}>
+                          <RiPencilLine />
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => setDeleteCollectionId(c.id)}
+                        >
+                          <RiDeleteBinLine />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -447,6 +516,32 @@ export function AppSidebar() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => !o && setDeleteCollectionId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete collection?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Removes “{deleteTarget?.name}” ({deleteTarget?.ids.size ?? 0}{" "}
+              {deleteTarget?.ids.size === 1 ? "bookmark" : "bookmarks"}). The
+              bookmarks themselves are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteCollectionId) removeCollection(deleteCollectionId);
+                setDeleteCollectionId(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={rebuildOpen} onOpenChange={setRebuildOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
