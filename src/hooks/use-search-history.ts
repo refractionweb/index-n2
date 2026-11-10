@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react";
 
-// Vanilla parity (`index.html:3276-3289`): persist the last `MAX_ENTRIES`
-// queries (newest first), dedup case-sensitively, drop anything shorter than
-// `MIN_LENGTH`. Stored as a JSON string array at `search-history`.
+// Persist the last `MAX_ENTRIES` queries (newest first), dedup
+// case-sensitively, drop anything shorter than `MIN_LENGTH`. Stored as a JSON
+// string array at `search-history`.
 const STORAGE_KEY = "search-history";
 const MAX_ENTRIES = 10;
 const MIN_LENGTH = 2;

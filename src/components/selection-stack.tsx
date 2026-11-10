@@ -3,8 +3,7 @@ import type { Bookmark } from "@/types/bookmark";
 
 // Horizontal stack of the last 3 selected bookmarks, rendered in the selection
 // bar. DOM is managed imperatively in a useLayoutEffect (no per-card React
-// transition library); originally ported from vanilla's `updateSelectionBar`
-// (index.html:1829-1920) and extended since. Behavior:
+// transition library). Behavior:
 // - Select: new card slides + fades in from the right, on top; the oldest card
 //   slides out to the left and fades.
 // - Deselect: the window slides back — the revealed card fades in at the left

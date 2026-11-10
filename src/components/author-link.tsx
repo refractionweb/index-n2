@@ -41,8 +41,7 @@ export function AuthorLink({
   size?: keyof typeof SIZE_MAP;
   className?: string;
   // Optional search term — when set, wraps matches in both `name` and
-  // `handle` with <mark>. The `@` prefix stays outside the highlight, same
-  // as vanilla.
+  // `handle` with <mark>. The `@` prefix stays outside the highlight.
   highlight?: string;
 }) {
   const s = SIZE_MAP[size];
@@ -57,8 +56,7 @@ export function AuthorLink({
         // `self-start` prevents cross-axis stretch when this link sits inside a
         // flex-col container (e.g. the lightbox card panel). Without it the
         // anchor fills the panel width and `group-hover:underline` fires over
-        // empty space to the right of the text. Matches vanilla's
-        // `.card-header { display: inline-flex; max-width: 100% }` hit-area.
+        // empty space to the right of the text.
         "group flex min-w-0 items-center gap-2 self-start text-inherit no-underline",
         className
       )}

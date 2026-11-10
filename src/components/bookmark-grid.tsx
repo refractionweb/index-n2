@@ -35,7 +35,7 @@ export function BookmarkGrid() {
     );
   }
   // States 1+2 combined: file missing OR file exists with 0 records. Splitting
-  // these requires a `firstRun` signal from /api/info — tracked in TODO.
+  // these requires a `firstRun` signal that /api/info doesn't expose.
   if (!bookmarks || bookmarks.length === 0) {
     return (
       <StatusMessage>

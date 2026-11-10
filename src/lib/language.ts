@@ -5,8 +5,7 @@
 // `qXX` triple are filtered as a side effect rather than via a hardcoded
 // blacklist. We do NOT exclude `en` — assuming English-as-default is
 // US-centric; a Japanese user has `ja` as their default and `en` is the
-// outlier. See CLAUDE.md ft data field gotchas for the full failure-mode
-// inventory.
+// outlier.
 export function isDisplayableLanguage(
   lang: string | null | undefined,
 ): boolean {

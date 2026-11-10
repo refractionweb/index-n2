@@ -628,8 +628,8 @@ function CheckIndicator({ selected }: { selected: boolean }) {
 function ColorPickerPopoverContent() {
   const { bookmarks } = useBookmarks();
   const { state, dispatch } = useFilter();
-  // Mirrors vanilla index.html:2764 — the color filter is unusable until
-  // colorize.js has written colors.json. Show a hint instead of an empty picker.
+  // The color filter is unusable until colorize.js has written colors.json.
+  // Show a hint instead of an empty picker.
   const hasColors = useMemo(
     () => !!bookmarks?.some((b) => b.media.some((m) => m.colors)),
     [bookmarks]
@@ -773,7 +773,7 @@ function AccountsPopoverContent() {
   const q = query.trim().toLowerCase();
   const hasQuery = q.length > 0;
 
-  // Mirror vanilla's behavior: empty query → only multi-posters + "Other"
+  // Empty query → only multi-posters + "Other"
   // collapse row. Non-empty query → filter across all accounts and render
   // just the matches. Either way, the number of mounted items stays small.
   const visible = useMemo<AccountRow[]>(() => {
@@ -1029,9 +1029,9 @@ function LanguagesPopoverContent() {
 
 // Corner "clear filter" badge — a 24px hit target (size-6, on the 4px grid) with
 // a 14px visible dot (size-3.5) centered inside. The -top-3/-right-3 offsets are
-// exactly half of size-6 for 50% corner overlap, matching the invisible-halo
-// pattern of vanilla's .filter-clear (index.html:665-694) without needing
-// arbitrary values. stopPropagation so the badge click doesn't open the popover.
+// exactly half of size-6 for 50% corner overlap (an invisible halo around the
+// dot) without needing arbitrary values. stopPropagation so the badge click
+// doesn't open the popover.
 function FilterClearBadge({ onClear }: { onClear: () => void }) {
   return (
     <button
@@ -1044,21 +1044,17 @@ function FilterClearBadge({ onClear }: { onClear: () => void }) {
       //
       // Hidden by default; revealed only when the filter wrapper is hovered
       // OR the popover is open (Radix's PopoverTrigger sets aria-expanded).
-      // Mirrors vanilla's
-      //   `.has-filter:hover .filter-clear,
-      //    .has-filter:has(.popup-open) .filter-clear { display: flex; }`
-      // at index.html:695-699.
       className="absolute -top-[11px] -right-[11px] z-10 hidden size-6 items-center justify-center appearance-none p-0 transition-opacity group-hover:flex group-has-[[aria-expanded=true]]:flex hover:opacity-70"
       onClick={(e) => {
         e.stopPropagation();
         onClear();
       }}
     >
-      {/* 1:1 port of vanilla .filter-clear (index.html:665-694):
+      {/* Layout:
           - button is flex-centered so the `<span>` dot lands at center via the
             "absolute with auto inset" rule (flex resolves its auto position)
-          - the icon uses explicit translate(-50%, -50%) centering, vanilla's
-            `.filter-clear .icon { top: 50%; left: 50%; transform: … }`
+          - the icon uses explicit top/left 50% + translate(-50%, -50%)
+            centering
           - hover opacity is on the BUTTON so dot + icon fade as one layer
             (Safari otherwise snaps them to different subpixel grids) */}
       <span className="bg-foreground absolute size-3.5 rounded-full" />

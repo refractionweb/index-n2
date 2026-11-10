@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
-// Vanilla parity: `index.html:1517` — 7 column widths in px.
+// 7 column widths in px.
 export const ZOOM_LEVELS: readonly number[] = [
   180, 240, 320, 400, 500, 700, 1000,
 ];

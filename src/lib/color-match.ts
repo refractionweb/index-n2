@@ -1,4 +1,3 @@
-// Port of vanilla's matchMediaColor / colorMatch (index.html:2578-2619).
 // Given a user-selected color filter and per-media color stats, decide whether
 // the media (or any media in a bookmark) matches.
 
@@ -7,7 +6,7 @@ import type { Bookmark, ColorData } from "@/types/bookmark";
 import { deltaE, rgbToLab } from "@/lib/color-math";
 import { hexToRgb } from "@/lib/color-space";
 
-const COLOR_ACCURACY = 15; // Delta E threshold, matches vanilla
+const COLOR_ACCURACY = 15; // Delta E threshold
 
 function targetLab(color: ColorSelection) {
   if ("special" in color) return null;

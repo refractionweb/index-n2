@@ -210,8 +210,7 @@ function DesktopLayout({
     >
       {/* Col 1: close (top spacer) · prev (center) · palette (bottom spacer).
           Both spacers are flex-1 so the prev button sits at the true column
-          center regardless of close/palette heights — matches vanilla's
-          `.lb-spacer { flex: 1 }` sandwich (index.html:1192-1199). */}
+          center regardless of close/palette heights. */}
       <div className="flex flex-col items-center">
         <div className="flex flex-1 flex-col items-center">
           <Button variant="secondary" size="icon-lg" onClick={onClose} aria-label="Close">
@@ -552,9 +551,7 @@ function LightboxThumbs({
             // `border-white`, not `border-primary`: the lightbox overlay is
             // `bg-black/80` regardless of app theme, so the thumb sits in a
             // forced-dark visual context. `border-primary` flips to near-black
-            // in light theme and disappears against the dark backdrop. Matches
-            // vanilla's `.lb-thumb.active { border-color: #fff }` at
-            // index.html:1302.
+            // in light theme and disappears against the dark backdrop.
             "size-14 shrink-0 overflow-hidden rounded border-2 " +
             (i === activeIndex ? "border-white" : "border-transparent")
           }

@@ -21,9 +21,6 @@ import { useSettings } from "@/contexts/settings-context";
 import { cn } from "@/lib/utils";
 import { DEFAULT_SETTINGS, type Settings } from "@/types/settings";
 
-// Settings tab. Individual controls shipped one per migration pass; the shell
-// and ToggleRow helper are stable from Pass 1.
-
 export function SettingsView() {
   const { settings, update } = useSettings();
   const { info, loaded: infoLoaded } = useAppInfo();

@@ -67,8 +67,8 @@ export type Bookmark = {
   bookmarkedAt: string | null;
   // ISO timestamp from ft's last sync of this record. Used in the lightbox
   // Details panel to surface staleness ("Synced 2 days ago"). Don't conflate
-  // with `bookmarkedAt`, which is unreliable as a save-time signal — see
-  // CLAUDE.md ft data field gotchas.
+  // with `bookmarkedAt`, which is when ft first saw the bookmark on sync, not
+  // when it was saved on X.
   syncedAt: string | null;
   language: string;
   links: string[];

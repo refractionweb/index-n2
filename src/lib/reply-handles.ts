@@ -1,6 +1,5 @@
 // Reply tweets often start with a run of @handles: "@alice @bob actual body".
 // Split that run off so it can render as pills and the body stays clean.
-// Ported from vanilla's extractReplyHandles (index.html:3701-3706).
 
 export type ExtractedHandles = {
   handles: string[];

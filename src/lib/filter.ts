@@ -134,7 +134,7 @@ export function filterBookmarks(
 
   const term = trimmed.toLowerCase().replace(/^@/, "");
   const hasTerm = term.length > 0;
-  // Vanilla parity: the search term is dual-purpose. We try to parse it as a
+  // The search term is dual-purpose. We try to parse it as a
   // date; if it parses, a bookmark passes when EITHER the text matches OR the
   // date matches (OR, not AND). Typing "april" includes both bookmarks
   // containing the word and bookmarks posted in any April.
@@ -197,7 +197,7 @@ export function filterBookmarks(
 
 function applySort(result: Bookmark[], sort: SortKey, order: SortOrder) {
   if (sort === "random") {
-    // Fisher-Yates, fresh every recompute — matches vanilla behavior.
+    // Fisher-Yates, fresh every recompute.
     // Order is irrelevant for random and ignored.
     for (let i = result.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -211,7 +211,7 @@ function applySort(result: Bookmark[], sort: SortKey, order: SortOrder) {
 
 // Gallery view: filter at bookmark level for everything *except* types and
 // color (which apply per-image), then flatten each surviving bookmark's media
-// items, applying type+color per image. Mirrors vanilla index.html:3041-3068.
+// items, applying type+color per image.
 export function filterAndFlattenGallery(
   bookmarks: Bookmark[],
   state: FilterState
@@ -264,7 +264,7 @@ export function filterAndFlattenGallery(
 
   // Per-image pass: only image/video/gif type filters apply in gallery; the
   // text/link/quoted/thread filters are ignored (they're bookmark-level
-  // concepts that don't map to individual media). Matches vanilla.
+  // concepts that don't map to individual media).
   const wantImage = types.has("image");
   const wantVideo = types.has("video");
   const wantGif = types.has("gif");

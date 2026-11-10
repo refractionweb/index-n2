@@ -160,7 +160,7 @@ function reducer(state: FilterState, action: Action): FilterState {
       // internally (see pickTumble there).
       return { ...state, shuffleNonce: Math.random() };
     case "clearAll":
-      // Preserve user's chosen sort + order across filter resets — vanilla parity.
+      // Preserve user's chosen sort + order across filter resets.
       return { ...initialState, sort: state.sort, order: state.order };
   }
 }

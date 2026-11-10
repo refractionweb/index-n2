@@ -104,9 +104,9 @@ function DropdownMenuCheckboxItem({
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
         <DropdownMenuPrimitive.ItemIndicator>
-          {/* Override (see .workfiles/shadcn-overrides.md): stock renders a
-              check for `indeterminate` too; a minus is the tri-state
-              convention. */}
+          {/* Override: stock renders a check for `indeterminate` too; a
+              minus is the tri-state convention. Local edit to the shadcn
+              primitive — `shadcn add --overwrite` reverts it. */}
           {checked === "indeterminate" ? <RiSubtractLine /> : <RiCheckLine />}
         </DropdownMenuPrimitive.ItemIndicator>
       </span>

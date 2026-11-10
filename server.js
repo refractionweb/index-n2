@@ -29,8 +29,7 @@ const PORT_PINNED = !!process.env.PORT;
 const SETTINGS_PATH = join(CACHE_DIR, "settings.json");
 
 // Settings schema. Defaults are authoritative — loaded settings are merged on
-// top so old files without new keys stay valid. Each field is wired by a
-// separate migration pass; pass 1 only ships the shape + persistence.
+// top so old files without new keys stay valid.
 const DEFAULT_SETTINGS = Object.freeze({
   autoplayVideos: true,
   // 0 means "no limit" — ft fetch-media runs without --limit (Infinity in
@@ -343,8 +342,7 @@ function setSecurityHeaders(res) {
 
 // Range of fieldtheory-cli versions index-n2 has been tested against. Both
 // bounds inclusive. Starts with min === max (single tested version); expand
-// `max` upward as new ft releases get verified. .workfiles/ft-compat.md
-// tracks the audit trail of what was tested when.
+// `max` upward as new ft releases get verified.
 //
 // Detected ft outside this range:
 //   - older than `min` → "outdated", sync controls disabled (we know flags

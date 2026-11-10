@@ -4,14 +4,12 @@ import { highlightText } from "@/lib/highlight";
 
 // Turn plain text into React nodes where URLs and @mentions become clickable
 // <a>s and — if `highlight` is set — other text segments get their matches
-// wrapped in <mark>. Matches vanilla's `highlight(linkify(esc(text)), searchTerm)`
-// shape (index.html:3687-3696) but operates on React nodes instead of HTML
-// strings, so we never have to sanitize HTML or worry about putting <mark>
-// inside an href.
+// wrapped in <mark>. Operates on React nodes instead of HTML strings, so we
+// never have to sanitize HTML or worry about putting <mark> inside an href.
 //
-// The lookbehind `(?<=^|\s)` on the @mention alternative mirrors vanilla's
-// `/(^|\s)@(\w+)/g` — a mention must sit at the start of the string or after
-// whitespace, which avoids false positives on "foo@bar.com"-style fragments.
+// The lookbehind `(?<=^|\s)` on the @mention alternative means a mention must
+// sit at the start of the string or after whitespace, which avoids false
+// positives on "foo@bar.com"-style fragments.
 const TOKEN = /(https?:\/\/\S+|(?<=^|\s)@\w+)/g;
 const LINK_CLASS = "text-primary hover:underline";
 

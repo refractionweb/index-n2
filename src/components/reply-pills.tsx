@@ -10,8 +10,7 @@ import { Badge } from "@/components/ui/badge";
 // (via Badge's `asChild` slot — Badge picks up its hover styles when the
 // rendered element matches `[a]`, see badge.tsx variants). Archived is a
 // static state indicator, not a link. First reply pill carries the
-// corner-arrow icon (double if 2+ handles, single otherwise) — matches
-// vanilla index.html:3708-3733.
+// corner-arrow icon (double if 2+ handles, single otherwise).
 //
 // All three render inside one flex-wrap row when present, so they sit on
 // the same line. Reply and thread are mutually exclusive (reply takes

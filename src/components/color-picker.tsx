@@ -218,7 +218,7 @@ export function ColorPicker({ value, onChange }: Props) {
       ? "mono"
       : "empty";
 
-  // Vanilla marker math: inset by half-marker-width so markers stay fully
+  // Marker math: inset by half-marker-width so markers stay fully
   // visible at extremes (0%, 100%, 0°, 360°) instead of clipping.
   const svMarkerLeft = current
     ? `calc(${SV_MARKER_PX / 2}px + (100% - ${SV_MARKER_PX}px) * ${current.s / 100})`
@@ -232,7 +232,7 @@ export function ColorPicker({ value, onChange }: Props) {
 
   return (
     <div className="flex w-60 flex-col gap-3 select-none">
-      {/* SV square (always 1:1 — matches vanilla). 8px corners match the
+      {/* SV square (always 1:1). 8px corners match the
           hue bar's effective radius (`rounded-full` on h-4 = 16/2 = 8px),
           so SV square and hue bar share the same outer silhouette. */}
       <div
@@ -341,8 +341,8 @@ export function ColorPicker({ value, onChange }: Props) {
 }
 
 // White rect + gray triangle bottom-right = clean diagonal split with no
-// gradient anti-aliasing artifacts at rounded corners. Matches vanilla's
-// linear-gradient(135deg, #fff 50%, #888 50%) intent. The container's
+// gradient anti-aliasing artifacts at rounded corners (which a
+// linear-gradient(135deg, #fff 50%, #888 50%) would show). The container's
 // 1px border is drawn via `outline` (paints above children) so the SVG
 // can fill the box without covering it — see preset/swatch classNames.
 function MonoSwatch() {
@@ -359,7 +359,7 @@ function MonoSwatch() {
 }
 
 // White rect + red diagonal stroke from corner to corner with rounded caps.
-// Replaces the vanilla CSS gradient strikethrough — no soft-edge artifacts.
+// SVG instead of a CSS gradient strikethrough — no soft-edge artifacts.
 function EmptyStrikeSwatch() {
   return (
     <svg

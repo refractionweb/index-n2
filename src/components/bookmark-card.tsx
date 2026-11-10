@@ -86,7 +86,7 @@ export const BookmarkCard = memo(function BookmarkCard({
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Skip when the click landed on an interactive descendant (buttons, links,
-    // media with its own handler, checkboxes). Mirrors vanilla's closest() guard.
+    // media with its own handler, checkboxes).
     // [data-card-video] is CardVideo's poster stand-in during scroll — treated
     // like the <video> it replaces so click behavior doesn't change mid-scroll.
     const target = e.target as HTMLElement;

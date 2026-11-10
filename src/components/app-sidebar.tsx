@@ -301,7 +301,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Collections</SidebarGroupLabel>
           {/* top-2.5: the preset trims SidebarGroup to py-1 but keeps the
               action's upstream top-3.5, which was centered on a py-2 group.
-              Re-center on the h-8 label. See .workfiles/shadcn-overrides.md. */}
+              Re-center on the h-8 label. */}
           <SidebarGroupAction
             className="top-2.5"
             aria-label="New collection"

@@ -38,7 +38,7 @@ export type DateFilter = {
 };
 
 // Parse a (lowercased, @-stripped) search term into a DateFilter, or null
-// if the term doesn't look date-shaped. Mirrors vanilla index.html:1529-1610.
+// if the term doesn't look date-shaped.
 export function parseDateQuery(term: string): DateFilter | null {
   if (!term) return null;
   const normalized = term.toLowerCase().trim();
