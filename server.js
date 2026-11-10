@@ -16,7 +16,10 @@ import open from "open";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf-8"));
-const CACHE_DIR = join(homedir(), ".index-n2");
+// Everything index-n2 derives or saves (colors, thumbnails, dedup, settings,
+// archive, collections). INDEX_N2_CACHE_DIR moves it, so a run against
+// another FT_DATA_DIR keeps its caches out of the default directory.
+const CACHE_DIR = process.env.INDEX_N2_CACHE_DIR || join(homedir(), ".index-n2");
 setColorCacheDir(CACHE_DIR);
 setThumbsCacheDir(CACHE_DIR);
 setDedupCacheDir(CACHE_DIR);
@@ -260,6 +263,16 @@ function safeJoin(base, reqSegment) {
 // real Origin. That forwarding is also what stops a third page from
 // laundering writes through the proxy — it would still present its own
 // Origin, not 5173's.
+//
+// INDEX_N2_DEV_PORT adds one more dev client port (vite started with
+// `--port N`, e.g. alongside another checkout's 5173). Its two loopback
+// origins go through the same exact match; unset, nothing beyond 5173 is
+// trusted.
+const DEV_CLIENT_PORT = (() => {
+  const n = Number(process.env.INDEX_N2_DEV_PORT);
+  return Number.isInteger(n) && n > 0 && n < 65536 ? n : null;
+})();
+
 function isSameOrigin(req) {
   const source = req.headers.origin;
   if (!source) return false;
@@ -267,7 +280,10 @@ function isSameOrigin(req) {
     source === `http://localhost:${PORT}` ||
     source === `http://127.0.0.1:${PORT}` ||
     source === "http://localhost:5173" ||
-    source === "http://127.0.0.1:5173"
+    source === "http://127.0.0.1:5173" ||
+    (DEV_CLIENT_PORT !== null &&
+      (source === `http://localhost:${DEV_CLIENT_PORT}` ||
+        source === `http://127.0.0.1:${DEV_CLIENT_PORT}`))
   );
 }
 
