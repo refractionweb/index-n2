@@ -28,8 +28,11 @@ export async function buildThumbnails(ftDir, onProgress) {
   if (!existsSync(THUMBS_DIR)) mkdirSync(THUMBS_DIR, { recursive: true });
 
   // A corrupt manifest shouldn't crash the rebuild — treat it the same as a
-  // missing manifest (no thumbs to build this round). dedup.js / colorize.js
-  // follow the same try/catch-and-fallback pattern for the manifest read.
+  // missing manifest (no thumbs to build this round). That includes valid
+  // JSON without an `entries` array (e.g. `{}`): iterating it throws, and
+  // the throw would abort the rest of the cache rebuild (dedup). dedup.js /
+  // colorize.js follow the same try/catch-and-fallback pattern for the
+  // manifest read.
   let manifest;
   try {
     manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
@@ -41,7 +44,8 @@ export async function buildThumbnails(ftDir, onProgress) {
 
   // First pass: cheap filter on manifest fields. No I/O per file.
   const candidates = [];
-  for (const e of manifest.entries) {
+  const entries = Array.isArray(manifest?.entries) ? manifest.entries : [];
+  for (const e of entries) {
     if (e.status !== "downloaded") continue;
     if (!e.localPath) continue;
     // Skip profile images
