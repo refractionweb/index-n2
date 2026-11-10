@@ -96,9 +96,16 @@ export function SelectionBar() {
 
   const title = activeCollection?.name ?? "Selection";
   const n = exportList.length;
-  const copy = (text: string, what: string) => {
-    void navigator.clipboard.writeText(text);
-    setStatus(`Copied ${n} ${what}`);
+  // Report what the clipboard write actually did. It can reject (document
+  // not focused, permission denied), and `navigator.clipboard` is absent
+  // outside secure contexts, so the access sits inside the try.
+  const copy = async (text: string, what: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus(`Copied ${n} ${what}`);
+    } catch {
+      setStatus("Copy failed");
+    }
   };
   const markdown = () =>
     exportMarkdown(exportList, { title, mediaDir: info?.mediaDir ?? null });
@@ -158,15 +165,15 @@ export function SelectionBar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[180px]">
-              <DropdownMenuItem onSelect={() => copy(exportIds(exportList), "IDs")}>
+              <DropdownMenuItem onSelect={() => void copy(exportIds(exportList), "IDs")}>
                 <RiHashtag />
                 IDs
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => copy(exportLinks(exportList), "links")}>
+              <DropdownMenuItem onSelect={() => void copy(exportLinks(exportList), "links")}>
                 <RiLinkM />
                 Links
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => copy(markdown(), "as Markdown")}>
+              <DropdownMenuItem onSelect={() => void copy(markdown(), "as Markdown")}>
                 <RiMarkdownLine />
                 Markdown
               </DropdownMenuItem>
