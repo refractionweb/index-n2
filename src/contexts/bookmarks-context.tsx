@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { loadMeasureFonts } from "@/lib/compute-bookmark-height";
 import type { Bookmark } from "@/types/bookmark";
 
 type BookmarksValue = {
@@ -29,6 +30,9 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/bookmarks");
       if (!res.ok) throw new Error(`/api/bookmarks → HTTP ${res.status}`);
       const data: Bookmark[] = await res.json();
+      // The list measures card heights on canvas as soon as it gets the
+      // data, and caches the result; the fonts must be in by then.
+      await loadMeasureFonts(data);
       setBookmarks(data);
       setError(null);
     } catch (e) {

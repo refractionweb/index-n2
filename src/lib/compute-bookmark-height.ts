@@ -35,8 +35,20 @@ const TEXT_LIMIT = 280;
 const PADDING_VERTICAL = 24; // p-3 on the inner div (12 + 12)
 const GAP = 12; // gap-3 between sections inside the inner div
 const HEADER_HEIGHT = 40; // AuthorLink size="sm" + checkbox row
-const PILLS_HEIGHT = 20; // ReplyOrThreadPills row (Badge in flex gap-1)
 const TEXT_LINE_HEIGHT = 20; // text-sm line-height (1.25rem at 16px root)
+
+// ReplyOrThreadPills: Badges in a `flex flex-wrap gap-1` row. A reply with
+// several handles wraps onto more rows, so the row count is computed from
+// each pill's width (see pillsHeight). Badge geometry (ui/badge.tsx):
+// h-5, 1 px border, px-2, text-[0.625rem] font-medium, and an icon at
+// size-2.5 + gap-1 on the lead pill.
+const PILL_ROW_HEIGHT = 20; // h-5
+const PILL_GAP = 4; // gap-1, both axes
+const PILL_CHROME = 2 + 16; // border 1+1, px-2 8+8
+const PILL_ICON = 10 + 4; // [&>svg]:size-2.5 + gap-1
+const PILL_FONT = "500 10px 'Inter Variable', sans-serif";
+// Must match the thread pill's label in reply-pills.tsx.
+const THREAD_PILL_LABEL = "Thread";
 const TRUNCATE_INDICATOR_HEIGHT = 24; // "Open full post" line + mt-1 internal spacing
 const DATE_FOOTER_BLOCK = 40; // date <a> + gap-1 + footer row (rough)
 
@@ -135,6 +147,39 @@ function getCtx(): CanvasRenderingContext2D | null {
   return ctx;
 }
 
+// Canvas measureText doesn't wait for web fonts: if Inter's face for a
+// character range hasn't loaded, it silently measures the fallback font,
+// and the per-bookmark caches below keep that width for the session. The
+// @fontsource faces are split by unicode-range and a face only loads once
+// text using it renders, so Cyrillic / Greek / Latin-ext glyphs are
+// usually still unloaded when the list first measures. Await this before
+// handing bookmarks to the list. Times out rather than holding the list
+// back if a font request stalls.
+const MEASURE_FONTS = [FONT, PILL_FONT, ARTICLE_TITLE_FONT];
+const FONT_LOAD_TIMEOUT_MS = 3000;
+
+export async function loadMeasureFonts(bookmarks: Bookmark[]): Promise<void> {
+  if (typeof document === "undefined" || !document.fonts) return;
+  const chars = new Set<string>();
+  const add = (s: string | undefined | null) => {
+    if (s) for (const ch of s) chars.add(ch);
+  };
+  for (const b of bookmarks) {
+    add(b.text);
+    add(b.quotedTweet?.text);
+    add(b.article?.title);
+  }
+  const sample = [...chars].join("");
+  const pending = MEASURE_FONTS.filter((f) => !document.fonts.check(f, sample));
+  if (pending.length === 0) return;
+  await Promise.race([
+    Promise.all(pending.map((f) => document.fonts.load(f, sample))).catch(
+      () => undefined,
+    ),
+    new Promise((resolve) => setTimeout(resolve, FONT_LOAD_TIMEOUT_MS)),
+  ]);
+}
+
 // One token = one whitespace-separated chunk of text. `width` is measured
 // once at tokenization time and reused for any colW. Caching at this
 // granularity is the architectural insight: line wrap is "sum widths until
@@ -152,6 +197,9 @@ type BodyTextData = {
   displayText: string;
   truncated: boolean;
   hasPills: boolean;
+  // Outer width of each reply/thread pill, in render order. Empty when
+  // there are no pills.
+  pillWidths: number[];
   paragraphs: Token[][];
 };
 
@@ -221,11 +269,52 @@ function getBodyData(bookmark: Bookmark): BodyTextData {
   const hasPills = handles.length > 0 || bookmark.isThread;
 
   const c = getCtx();
+  const pillWidths = hasPills && c ? measurePills(handles, c) : [];
   const paragraphs = displayText && c ? tokenize(displayText, c) : [];
 
-  const data: BodyTextData = { displayText, truncated, hasPills, paragraphs };
+  const data: BodyTextData = {
+    displayText,
+    truncated,
+    hasPills,
+    pillWidths,
+    paragraphs,
+  };
   bodyDataCache.set(bookmark, data);
   return data;
+}
+
+// Pill widths in ReplyOrThreadPills' render order: one pill per reply
+// handle ("@name", icon on the first); with no handles, a single thread
+// pill. Callers only invoke this when the card shows pills.
+function measurePills(
+  handles: string[],
+  c: CanvasRenderingContext2D,
+): number[] {
+  c.font = PILL_FONT;
+  const labels = handles.length > 0 ? handles.map((h) => `@${h}`) : [THREAD_PILL_LABEL];
+  return labels.map(
+    (label, i) =>
+      PILL_CHROME + (i === 0 ? PILL_ICON : 0) + c.measureText(label).width,
+  );
+}
+
+// Height of the wrapped pill row. Flex-wrap moves a pill to a new row when
+// it doesn't fit after the previous one plus the gap.
+function pillsHeight(pillWidths: number[], innerWidth: number): number {
+  if (pillWidths.length === 0) return 0;
+  let rows = 1;
+  let x = 0;
+  for (const w of pillWidths) {
+    if (x === 0) {
+      x = w;
+    } else if (x + PILL_GAP + w > innerWidth) {
+      rows += 1;
+      x = w;
+    } else {
+      x += PILL_GAP + w;
+    }
+  }
+  return rows * PILL_ROW_HEIGHT + (rows - 1) * PILL_GAP;
 }
 
 function getQuoteData(quote: QuotedTweet): QuoteTextData {
@@ -262,7 +351,9 @@ function getQuoteData(quote: QuotedTweet): QuoteTextData {
 // Inline `<a>`/`<mark>` spans inside linkifyText output don't change wrap
 // behavior — wrap is determined by text-node content, not tag boundaries
 // — so measuring the joined plain-text string is equivalent to measuring
-// the rendered linkified content.
+// the rendered linkified content. This holds only while those spans add
+// no inline width: the search highlight's px-px is cancelled by -mx-px
+// for that reason (highlight.tsx).
 //
 // Subpixel note: sum of per-token widths ≈ measureText(concatenation) for
 // Latin text in Inter Variable, but float arithmetic and rare cross-word
@@ -659,7 +750,7 @@ export function computeBookmarkHeightWithBreakdown(
 
   const sections: number[] = [];
   sections.push(HEADER_HEIGHT);
-  if (data.hasPills) sections.push(PILLS_HEIGHT);
+  if (data.hasPills) sections.push(pillsHeight(data.pillWidths, innerWidth));
   if (hasArticle || isPendingArticle) sections.push(articleHeight);
   else if (data.displayText) sections.push(textHeight);
   if (mediaHeight > 0) sections.push(mediaHeight);
@@ -700,7 +791,7 @@ export function computeBookmarkHeight(
   // Each section's intrinsic height, before adding inter-section gaps.
   const sections: number[] = [];
   sections.push(HEADER_HEIGHT);
-  if (data.hasPills) sections.push(PILLS_HEIGHT);
+  if (data.hasPills) sections.push(pillsHeight(data.pillWidths, innerWidth));
   // Article block replaces the tweet text section when present.
   // Pending placeholder when bookmark links to an X Article but ft
   // hasn't enriched it yet (see bookmark-card.tsx for matching render).
@@ -795,7 +886,7 @@ export function computeBookmarkHeightWithBoundary(
 
   const sections: number[] = [];
   sections.push(HEADER_HEIGHT);
-  if (data.hasPills) sections.push(PILLS_HEIGHT);
+  if (data.hasPills) sections.push(pillsHeight(data.pillWidths, innerWidth));
 
   // Article block replaces the tweet text section when present. Boundary
   // detection is intentionally skipped for the title — the DOM-fallback

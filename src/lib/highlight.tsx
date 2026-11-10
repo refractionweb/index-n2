@@ -23,7 +23,10 @@ export function highlightText(text: string, term: string): ReactNode[] {
     i % 2 === 1 ? (
       <mark
         key={i}
-        className="bg-foreground/15 text-foreground rounded-sm px-px"
+        // -mx-px cancels px-px so the highlight adds no inline width: card
+        // heights are predicted from the plain text, and 2px per match is
+        // enough to push a line onto a new row.
+        className="bg-foreground/15 text-foreground -mx-px rounded-sm px-px"
       >
         {part}
       </mark>
