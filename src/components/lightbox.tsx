@@ -496,7 +496,14 @@ function PaletteSwatch({
           style={{ backgroundColor: bg }}
         />
       </HoverCardTrigger>
-      <HoverCardContent side={side} className="w-auto rounded-xl p-1 text-xs" sideOffset={8}>
+      {/* Portaled like the More-actions menu; stop clicks on its padding
+          from reaching the lightbox's backdrop handler. */}
+      <HoverCardContent
+        side={side}
+        className="w-auto rounded-xl p-1 text-xs"
+        sideOffset={8}
+        onClick={(e) => e.stopPropagation()}
+      >
         <ButtonGroup>
           <Button
             variant="outline"
@@ -701,7 +708,11 @@ function LightboxCardPanel({
               <RiMoreFill />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          {/* The menu portals to <body>, but React still bubbles its clicks
+              through the component tree to the layout's backdrop handler,
+              whose DOM-based closest() check can't see the menu — so an item
+              click would also close the lightbox. Stop it here. */}
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <BookmarkMenuItems bookmark={bookmark} />
           </DropdownMenuContent>
         </DropdownMenu>
