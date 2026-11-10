@@ -16,8 +16,8 @@ export function exportLinks(bookmarks: Bookmark[]): string {
 
 export type MarkdownOptions = {
   title: string;
-  // Absolute directory holding ft's downloaded media. When known, media
-  // entries list the local file path in addition to the served URL.
+  // Directory holding ft's downloaded media, home-relative ("~/…") as the
+  // server reports it. When known, media entries list the local file path.
   mediaDir?: string | null;
 };
 
@@ -94,10 +94,11 @@ function mediaLine(
 ): string {
   if (!url) return `${type}: not fetched`;
   // Served URLs are `/media/<file>`; map to the on-disk path when we know
-  // the directory. Keep the served URL too so the line is useful either way.
+  // the directory. The served URL itself only resolves inside the running
+  // app, so it's never exported: without a directory the line is the type.
   const file = url.startsWith("/media/") ? url.slice("/media/".length) : null;
   if (file && mediaDir) return `${type}: ${joinPath(mediaDir, file)}`;
-  return `${type}: ${url}`;
+  return type;
 }
 
 function joinPath(dir: string, file: string): string {

@@ -21,6 +21,15 @@ setColorCacheDir(CACHE_DIR);
 setThumbsCacheDir(CACHE_DIR);
 setDedupCacheDir(CACHE_DIR);
 const FT = process.env.FT_DATA_DIR || join(homedir(), ".ft-bookmarks");
+
+// Home-relative form of a path ("~/.ft-bookmarks/media") for anything that
+// leaves the server as user-copyable text, so exports don't carry the
+// account name. Paths outside the home directory are returned unchanged.
+function tildify(p) {
+  const home = homedir();
+  if (p === home) return "~";
+  return p.startsWith(home + sep) ? "~" + p.slice(home.length) : p;
+}
 // Default port avoids the notorious 3000 collision (Next.js, Grafana, Rails,
 // etc). `PORT=` env pins explicitly and disables the auto-increment fallback
 // below — if the user asks for a specific port they want to know when it fails.
@@ -1363,9 +1372,9 @@ const server = createServer((req, res) => {
       author: pkg.author,
       ft,
       hasData,
-      // Absolute media directory so client-side exports (markdown) can emit
-      // local file paths an agent with shell access can open directly.
-      mediaDir: join(FT, "media"),
+      // Media directory, home-relative, so client-side exports (Markdown) can
+      // emit local file paths an agent with shell access can open directly.
+      mediaDir: tildify(join(FT, "media")),
     }));
     return;
   }
