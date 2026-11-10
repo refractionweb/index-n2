@@ -13,6 +13,10 @@
 //   ok    (default) frames for each phase, then exit 0
 //   fail  one frame, an error line, exit 1
 //   hang  one frame, then silence until killed (SIGINT exits like ft does)
+//   folder-skip   with --folders: ft's "⚠ Skipped <name>: <reason>" line for a
+//                 folder whose name contains ": ", then exit 0 as ft does
+//   folder-error  with --folders: ft's "Folder sync error: <msg>" line in place
+//                 of the folder walks, then exit 0 as ft does
 
 import { ftTestedMax } from "./fixture-config.mjs";
 
@@ -79,13 +83,25 @@ async function sync() {
     // ft's folder phase: a header on stderr, one "→ <name>..." line per
     // folder, nothing during a walk, then per-folder summaries on stdout.
     process.stderr.write("\n  Syncing bookmark folders...\n");
-    for (const name of ["Fixture design refs", "Fixture to read"]) {
+    if (MODE === "folder-error") {
+      // ft's catch around the whole folder phase (cli.ts): no walks, no
+      // summaries, exit 0.
+      process.stderr.write("\n  Folder sync error: BookmarkFoldersSlice API returned 403.\n\n");
+    }
+    for (const name of MODE === "folder-error" ? [] : ["Fixture design refs", "Fixture to read"]) {
       process.stderr.write(`  \u2192 ${name}...\n`);
       await sleep(FRAME_MS * 4);
     }
-    console.log("");
-    console.log(`  \u2713 ${"Fixture design refs".padEnd(24)}  13 unchanged`);
-    console.log(`  \u2713 ${"Fixture to read".padEnd(24)}  9 unchanged`);
+    if (MODE !== "folder-error") {
+      console.log("");
+      console.log(`  \u2713 ${"Fixture design refs".padEnd(24)}  13 unchanged`);
+      console.log(`  \u2713 ${"Fixture to read".padEnd(24)}  9 unchanged`);
+    }
+    if (MODE === "folder-skip") {
+      console.log("");
+      console.log("  \u26a0 Skipped Fixture ratio: 16:9 refs: walk incomplete (rate limited)");
+      console.log("  Re-run `ft sync --folders` to retry.");
+    }
     console.log("");
   }
   if (!has("--no-media")) {

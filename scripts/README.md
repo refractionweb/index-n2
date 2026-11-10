@@ -18,7 +18,7 @@ Flags and environment:
 |---|---|
 | `--corrupt` | `dev:fixture`, `make-fixture.mjs`, `check-fixture.mjs`: a separate variant with a malformed `bookmarks.jsonl` line, a `{}` media manifest and a non-array `archived.json`. |
 | `--now <ISO date>` | `make-fixture.mjs`: pins "now" for the today / yesterday cases. |
-| `FIXTURE_FT_MODE` | Fake `ft` behavior: `ok` (default), `fail` (exits 1), `hang` (stalls until Cancel). |
+| `FIXTURE_FT_MODE` | Fake `ft` behavior: `ok` (default), `fail` (exits 1), `hang` (stalls until Cancel), `folder-skip` / `folder-error` (with Sync X folders on: ft's skipped-folder or folder-error line, exit 0). |
 | `FIXTURE_PORT`, `FIXTURE_VITE_PORT` | Server and dev-client ports. 5787 and 5173 are refused. |
 
 ## Layout
