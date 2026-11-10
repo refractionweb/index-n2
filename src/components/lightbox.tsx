@@ -87,6 +87,18 @@ export function Lightbox() {
     if (!target) return;
     const count = getTweet(target).media.length;
     const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      // Arrows that belong to something else: a key another handler already
+      // used, a modifier chord, or focus in a menu (item navigation and
+      // submenus), a text field, or a video (seeking).
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t?.closest(
+          '[role="menu"], input, textarea, select, [contenteditable="true"], video'
+        )
+      )
+        return;
       if (e.key === "ArrowLeft") setIndex((i) => Math.max(0, i - 1));
       else if (e.key === "ArrowRight")
         setIndex((i) => Math.min(count - 1, i + 1));
