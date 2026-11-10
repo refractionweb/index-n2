@@ -788,24 +788,54 @@ function resolveMediaTargets(b, coveredProfileImageUrls, skipProfileImages) {
 // ft's 62 on the same data) because a single covered author pfp shows up
 // as 1 manifest entry but N bookmark slots.
 //
-// Covered = downloaded OR (skipped_too_large AND bytes > maxBytes). Failed
-// entries are NOT covered: ft has no permanent-failure backoff and retries
-// them every run. They count as pending here too.
-function computeUnfetchedTotal() {
+// Covered = downloaded OR (skipped_too_large AND bytes > maxBytes) OR, from
+// ft 1.3.22, a failed entry still inside its retry backoff. Before 1.3.22 ft
+// retried every failed entry on every run, so failed entries counted as
+// pending; from 1.3.22 `ft fetch-media` (and the media phase of `ft sync`)
+// skips them until the backoff runs out, and counting them left a badge that
+// Fetch Media could not clear. Backoff expires with time, so the count is
+// also recomputed periodically (see UNFETCHED_RECOUNT_MS).
+const FT_MEDIA_BACKOFF_SINCE = "1.3.22";
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+// Mirror of ft 1.3.22's failedEntryBackoffMs (bookmark-media.ts). Keyed on
+// ft's exact `reason` strings.
+function failedEntryBackoffMs(e) {
+  if (e.reason === "HTTP 404" && e.sourceUrl.includes("/profile_images/")) return 365 * DAY_MS;
+  if (e.reason === "HTTP 403" && (e.sourceUrl.includes("video.twimg.com") || e.sourceUrl.includes("/amplify_video/"))) return 30 * DAY_MS;
+  if (e.reason === "HTTP 404" && e.sourceUrl.includes("pbs.twimg.com/media/")) return DAY_MS;
+  return HOUR_MS;
+}
+
+// Mirror of ft's isCoveredEntry for the GUI's fixed settings: default
+// maxBytes, and no --retry-failed (index-n2 never passes it).
+function isManifestEntryCovered(e, nowMs, honorBackoff) {
+  if (e.status === "downloaded") return true;
+  if (e.status === "failed") {
+    if (!honorBackoff) return false;
+    const fetchedAtMs = new Date(e.fetchedAt).getTime();
+    if (Number.isNaN(fetchedAtMs)) return false;
+    return nowMs - fetchedAtMs < failedEntryBackoffMs(e);
+  }
+  if (e.status !== "skipped_too_large") return false;
+  return typeof e.bytes === "number" && !Number.isNaN(e.bytes) && e.bytes > DEFAULT_MEDIA_MAX_BYTES;
+}
+
+function computeUnfetchedTotal(nowMs = Date.now()) {
   const jsonlPath = join(FT, "bookmarks.jsonl");
   const manifestPath = join(FT, "media-manifest.json");
   if (!existsSync(jsonlPath)) return 0;
 
+  const ftVersion = detectFtVersion()?.version;
+  const honorBackoff = !!ftVersion && compareVersion(ftVersion, FT_MEDIA_BACKOFF_SINCE) >= 0;
   const coveredAssetKeys = new Set();
   const coveredProfileImageUrls = new Set();
   if (existsSync(manifestPath)) {
     try {
       const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
       for (const e of manifest.entries || []) {
-        const isCovered =
-          e.status === "downloaded" ||
-          (e.status === "skipped_too_large" && typeof e.bytes === "number" && e.bytes > DEFAULT_MEDIA_MAX_BYTES);
-        if (!isCovered || !e.sourceUrl) continue;
+        if (!e.sourceUrl || !isManifestEntryCovered(e, nowMs, honorBackoff)) continue;
         if (e.sourceUrl.includes("/profile_images/")) {
           coveredProfileImageUrls.add(e.sourceUrl);
         } else if (e.tweetId) {
@@ -1878,6 +1908,21 @@ const server = createServer((req, res) => {
 // Start initial rebuild BEFORE listen() completes, so requests racing with startup
 // share the same in-flight rebuild via runRebuild().
 runRebuild(STATUS.buildingCaches);
+
+// ft 1.3.22's retry backoff expires with time (the shortest window is one
+// hour), so a failed entry can become pending again without any file
+// changing. Recount on a timer, skipping while a run owns the count, and
+// push only when it moved.
+const UNFETCHED_RECOUNT_MS = 10 * 60 * 1000;
+setInterval(() => {
+  if (syncRunning) return;
+  const next = computeUnfetchedTotal();
+  if (next !== unfetchedCount) {
+    unfetchedCount = next;
+    emitSync();
+  }
+}, UNFETCHED_RECOUNT_MS).unref();
+
 // `autoOpenBrowser` in settings is the primary knob. argv/CI/BROWSER env
 // overrides still apply so automation and `--no-open` invocations don't pop a
 // window even if the setting is on. Read once at startup — changes require a

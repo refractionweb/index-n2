@@ -137,7 +137,7 @@ No remote endpoints are contacted. All media is read from ft's `media/` director
 - Categories are read-only. No in-app classification editor.
 - With ft older than 1.3.22, or on Windows, cancelling a media fetch leaves orphaned files on disk: ft exits without writing its manifest, so that batch's downloads are fetched again next time. Bandwidth waste, no corruption. ft 1.3.22 on macOS and Linux finishes the current file and saves the manifest on cancel.
 - Cancelling Backfill Gaps (`ft sync --gaps`) exits immediately in every ft version. ft saves gaps progress every 100 records, so up to 99 are checked again next run.
-- A small set of permanently unfetchable URLs (deleted tweets, protected accounts) keep the "N unfetched" badge non-zero.
+- With ft older than 1.3.22, permanently unfetchable URLs (deleted tweets, protected accounts) keep the "N unfetched" count non-zero. From 1.3.22 the count leaves out failed downloads while ft's retry backoff holds them (1 hour to 1 year, depending on the failure), matching what Fetch Media would download now.
 
 ## Development
 
