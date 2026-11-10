@@ -1,11 +1,5 @@
-# Project-local
+# Tool caches
 .cache/
-.workfiles/
-CLAUDE.md
-TODO.md
-.claude/
-.agents/
-skills-lock.json
 
 # Logs
 logs
