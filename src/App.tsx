@@ -153,6 +153,10 @@ function ScrollContent() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // An Escape that already closed something (Radix menus, popovers,
+      // dialogs and the lightbox call preventDefault when they dismiss)
+      // shouldn't also clear the selection.
+      if (e.key === "Escape" && e.defaultPrevented) return;
       if (e.key === "Escape" && !lightboxTarget && selectedIds.size > 0) {
         clear();
         return;
