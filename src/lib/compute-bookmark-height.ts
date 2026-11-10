@@ -29,6 +29,7 @@ import {
   expandTcoLinks,
   shortenUrlForDisplay,
   splitUrlTail,
+  truncateForCard,
   URL_PATTERN,
 } from "./format";
 import { extractReplyHandles } from "./reply-handles";
@@ -266,14 +267,13 @@ function getBodyData(bookmark: Bookmark): BodyTextData {
 
   const expandedText = expandTcoLinks(bookmark.text || "", bookmark.links);
   const { handles, rest } = extractReplyHandles(expandedText);
-  const truncated = rest.length > TEXT_LIMIT;
   // Apply URL shortening AFTER the 280-char truncate to match the
   // renderer's order (bookmark-card.tsx → linkifyText). The truncate
   // check operates on the expanded text length so the `truncated` flag
   // (and the "Open full post" indicator it gates) fires consistently with
   // the renderer; URL display shortening then runs over whatever text
   // survives the truncate, mirroring linkifyText's behavior exactly.
-  const baseDisplayText = truncated ? rest.slice(0, TEXT_LIMIT) + "…" : rest;
+  const { text: baseDisplayText, truncated } = truncateForCard(rest, TEXT_LIMIT);
   const displayText = shortenUrlsForDisplay(baseDisplayText);
   const hasPills = handles.length > 0 || bookmark.isThread;
 
@@ -331,13 +331,12 @@ function getQuoteData(quote: QuotedTweet): QuoteTextData {
   if (cached) return cached;
 
   const text = quote.text || "";
-  const truncated = text.length > TEXT_LIMIT;
   // Truncate THEN shorten URLs, mirroring the renderer
   // (quoted-tweet-card.tsx → linkifyText) and the body path in getBodyData.
   // Quoted tweets have no `links` field so nothing expands, but linkify still
   // strips protocols / truncates long URLs — measuring the raw URL over-counts
   // line width and leaves a gap under the quoted card.
-  const baseDisplayText = truncated ? text.slice(0, TEXT_LIMIT) + "…" : text;
+  const { text: baseDisplayText } = truncateForCard(text, TEXT_LIMIT);
   const displayText = shortenUrlsForDisplay(baseDisplayText);
   const hasText = !!displayText;
   const hasMedia = !!(quote.media && quote.media.length > 0);

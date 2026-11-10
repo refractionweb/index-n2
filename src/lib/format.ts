@@ -95,6 +95,46 @@ export function splitUrlTail(match: string): [url: string, tail: string] {
   return [match.slice(0, end), match.slice(end)];
 }
 
+// Card-length cut of post text: about `limit` UTF-16 units plus "…". Never
+// ends inside a URL — the cut moves to the URL's end instead, since a cut
+// link points nowhere and the card shows links shortened to 30 chars anyway
+// — and never splits a character: it backs off to a grapheme boundary, so an
+// emoji at the limit doesn't render as "�". Shared by the cards and the
+// height predictor so both cut in the same place.
+const graphemes =
+  typeof Intl !== "undefined" && "Segmenter" in Intl
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+export function truncateForCard(
+  text: string,
+  limit: number
+): { text: string; truncated: boolean } {
+  if (text.length <= limit) return { text, truncated: false };
+  let cut = limit;
+  for (const m of text.matchAll(new RegExp(URL_PATTERN.source, "g"))) {
+    const start = m.index ?? 0;
+    if (start >= cut) break;
+    const end = start + m[0].length;
+    if (end > cut) {
+      cut = end;
+      break;
+    }
+  }
+  if (cut >= text.length) return { text, truncated: false };
+  if (graphemes) {
+    let boundary = 0;
+    for (const { index } of graphemes.segment(text)) {
+      if (index > cut) break;
+      boundary = index;
+    }
+    cut = boundary;
+  } else {
+    const code = text.charCodeAt(cut - 1);
+    if (code >= 0xd800 && code <= 0xdbff) cut -= 1;
+  }
+  return { text: text.slice(0, cut) + "…", truncated: true };
+}
+
 // Replace each t.co/xxx in text with the corresponding expanded URL from `links`,
 // in document order. Any t.co without a matching entry is stripped — media-only
 // tweets ship as {text: "... https://t.co/xxx", links: []} where the trailing

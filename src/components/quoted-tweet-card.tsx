@@ -2,7 +2,7 @@ import { MediaPlaceholder } from "@/components/media-placeholder";
 import { useBookmarks } from "@/contexts/bookmarks-context";
 import { useFilter } from "@/contexts/filter-context";
 import { useLightbox } from "@/contexts/lightbox-context";
-import { fmtShortDate } from "@/lib/format";
+import { fmtShortDate, truncateForCard } from "@/lib/format";
 import { normalizeSearchTerm } from "@/lib/highlight";
 import { linkifyText } from "@/lib/linkify";
 import type { QuotedTweet } from "@/types/bookmark";
@@ -78,8 +78,7 @@ export function QuotedTweetCard({
     openMedia();
   };
   const text = quote.text || "";
-  const displayText =
-    truncate && text.length > TEXT_LIMIT ? text.slice(0, TEXT_LIMIT) + "…" : text;
+  const displayText = truncate ? truncateForCard(text, TEXT_LIMIT).text : text;
 
   return (
     <button

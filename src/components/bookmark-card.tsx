@@ -7,7 +7,7 @@ import {
   RiRepeatLine,
 } from "@remixicon/react";
 import type { Bookmark, MediaItem } from "@/types/bookmark";
-import { expandTcoLinks, fmtAbsoluteDate, fmtNum } from "@/lib/format";
+import { expandTcoLinks, fmtAbsoluteDate, fmtNum, truncateForCard } from "@/lib/format";
 import { normalizeSearchTerm } from "@/lib/highlight";
 import { linkifyText } from "@/lib/linkify";
 import { extractReplyHandles } from "@/lib/reply-handles";
@@ -81,8 +81,7 @@ export const BookmarkCard = memo(function BookmarkCard({
 
   const expandedText = expandTcoLinks(text || "", links);
   const { handles, rest } = extractReplyHandles(expandedText);
-  const truncated = rest.length > TEXT_LIMIT;
-  const displayText = truncated ? rest.slice(0, TEXT_LIMIT) + "…" : rest;
+  const { text: displayText, truncated } = truncateForCard(rest, TEXT_LIMIT);
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Skip when the click landed on an interactive descendant (buttons, links,
