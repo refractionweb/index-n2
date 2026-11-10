@@ -16,8 +16,14 @@ const STORAGE_KEY = "gallery-zoom";
 const DEFAULT_INDEX = 2; // 320px
 
 function readStored(): number {
-  if (typeof localStorage === "undefined") return DEFAULT_INDEX;
-  const raw = localStorage.getItem(STORAGE_KEY);
+  // Reading localStorage throws when the browser blocks site data; this
+  // runs in useState's initializer, so a throw would take the app down.
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return DEFAULT_INDEX;
+  }
   if (raw === null) return DEFAULT_INDEX;
   const n = Number.parseInt(raw, 10);
   return Number.isInteger(n) && n >= 0 && n < ZOOM_LEVELS.length
