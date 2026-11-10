@@ -388,6 +388,17 @@ function setSecurityHeaders(res) {
 //     badge (probably works, but we haven't verified)
 const FT_TESTED = Object.freeze({ min: "1.3.19", max: "1.3.19" });
 
+// First ft release whose SIGINT handlers save progress before exiting: the
+// sync cursor and the media manifest (fieldtheory-cli#142). 1.3.20 and 1.3.21
+// were never published to npm, so this is the first release that has it.
+const FT_GRACEFUL_CANCEL_SINCE = "1.3.22";
+
+// Whether a cancel keeps ft's progress. Unix only: index-n2 cancels with
+// SIGINT there; on Windows it sends SIGTERM, which ft doesn't handle.
+function ftCancelSavesProgress(version) {
+  return process.platform !== "win32" && compareVersion(version, FT_GRACEFUL_CANCEL_SINCE) >= 0;
+}
+
 // Three-segment numeric version compare. Returns negative / zero / positive
 // in the usual sort-order convention. Tolerates missing trailing segments
 // ("1.3" === "1.3.0"). Falls back to treating unparseable input as 0 — so
@@ -838,7 +849,9 @@ function computeUnfetchedTotal() {
 // Add new phases here rather than inline at call sites so the contract holds.
 const STATUS = {
   starting:             "Starting...",
+  resumingSync:         "Resuming interrupted sync...",
   syncingBookmarks:     "Syncing bookmarks...",
+  cancelling:           "Cancelling...",
   fetchingMedia:        "Fetching media...",
   fillingGaps:          "Filling gaps...",
   indexing:             "Indexing...",
@@ -857,7 +870,7 @@ const STATUS = {
   // `label` is the subcommand as typed, e.g. "ft sync --gaps".
   exitError:   (label, code, signal) =>
     signal ? `${label}: terminated (${signal})` : `${label}: exited with code ${code}`,
-  idleKilled:  (label) => `${label}: no output for 5 min, stopped`,
+  idleKilled:  (label, minutes) => `${label}: no output for ${minutes} min, stopped`,
   pipelineError: "Sync failed. See server log.",
   newBookmarks:    (n)              => `${n} new bookmarks`,
   // Media-phase live progress. ft's spinner emits "N processed │ M downloaded";
@@ -925,7 +938,29 @@ async function rebuildCaches() {
   }
   cachedBookmarks = null;
   unfetchedCount = computeUnfetchedTotal();
+  resumePending = readSyncResumeCursor() !== null;
 }
+
+// ft's saved sync position. ft writes `lastCursor` when `ft sync` stops
+// before finishing its walk (cancel, rate limit, max runtime, page cap) and
+// clears it only on a terminal stop ("end of bookmarks", "caught up to newest
+// stored bookmark"). A plain incremental sync ends "caught up" at the newest
+// stored bookmark and so clears the cursor without visiting the pages past
+// it; only `ft sync --continue` resumes from it. Read-only, like every other
+// read of ft's data directory.
+function readSyncResumeCursor() {
+  try {
+    const state = JSON.parse(readFileSync(join(FT, "bookmarks-backfill-state.json"), "utf-8"));
+    return typeof state?.lastCursor === "string" && state.lastCursor ? state.lastCursor : null;
+  } catch {
+    return null;
+  }
+}
+
+// True when ft holds a resume cursor, so the next Sync starts with
+// `ft sync --continue`. Refreshed whenever caches rebuild (startup and the
+// end of every run).
+let resumePending = false;
 
 let syncRunning = false;
 let syncStep = null;
@@ -956,6 +991,10 @@ function syncSnapshot() {
     step: syncStep,
     unfetchedCount,
     canCancel: !!activeProc,
+    // Cancel was sent and ft is still winding down (saving its cursor or
+    // manifest). The UI shows "Cancelling..." and offers no second cancel.
+    cancelling: cancelRequested && !!activeProc,
+    resumePending,
     error: syncError,
   };
 }
@@ -1148,11 +1187,19 @@ const server = createServer((req, res) => {
     res.end(JSON.stringify({ ok: true, mode }));
     // strip ANSI escape codes; preserve \r so callers can split on it (spinner frames)
     const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
-    // Idle-based timeout: kill only if no stdout/stderr activity for IDLE_MS.
-    // Replaces the prior 120s hard timeout that killed legitimate long syncs
-    // mid-fetch. ft's spinner emits frequently (every progress callback), so
-    // 5 min of silence is a safe "actually hung" signal.
-    const IDLE_MS = 5 * 60 * 1000;
+    // Idle-based timeout: kill only if no stdout/stderr activity for the
+    // limit. Replaces the prior 120s hard timeout that killed legitimate long
+    // syncs mid-fetch. ft's spinner emits frequently (every progress
+    // callback), so 5 min of silence is a safe "actually hung" signal.
+    //
+    // After a cancel the limit widens to 20 min. ft's SIGINT handler stops
+    // its spinner and then waits for the in-flight request — a page, or a
+    // media download of up to 200 MB, or a 429 backoff sized by X's
+    // retry-after header — before saving its cursor or manifest. Output is
+    // silent throughout, and killing ft then (it has no SIGTERM handler)
+    // would drop exactly the progress the graceful cancel exists to keep.
+    const IDLE_MIN = 5;
+    const CANCEL_IDLE_MIN = 20;
     const run = (cmd, args, opts = {}) => new Promise((resolve) => {
       const { onOutput } = opts;
       // shell: true on Windows so npm-installed CLI shims (.cmd/.bat) resolve via PATH;
@@ -1161,12 +1208,13 @@ const server = createServer((req, res) => {
       activeProc = proc;
       emitSync();
       // "ft sync", "ft sync --gaps", "ft fetch-media" — for failure lines.
-      const label = [cmd, args[0], ...args.filter((a) => a === "--gaps" || a === "--rebuild")].join(" ");
+      const label = [cmd, args[0], ...args.filter((a) => a === "--gaps" || a === "--rebuild" || a === "--continue")].join(" ");
       let spawnFailed = false;
       let idleKilled = false;
       let lastActivity = Date.now();
+      const idleMinutes = () => (cancelRequested ? CANCEL_IDLE_MIN : IDLE_MIN);
       const idleTimer = setInterval(() => {
-        if (Date.now() - lastActivity > IDLE_MS) {
+        if (Date.now() - lastActivity > idleMinutes() * 60 * 1000) {
           idleKilled = true;
           // kill() throws on some platforms if the proc is already exiting
           // (between idle-fire and 'close'); swallow so the interval can
@@ -1202,7 +1250,7 @@ const server = createServer((req, res) => {
         // A spawn failure already recorded its own line; a user cancel
         // (SIGINT, non-zero exit) is not a failure.
         if (!spawnFailed && code !== 0) {
-          if (idleKilled) syncError = STATUS.idleKilled(label);
+          if (idleKilled) syncError = STATUS.idleKilled(label, idleMinutes());
           else if (!cancelRequested) syncError = STATUS.exitError(label, code, signal);
         }
         emitSync();
@@ -1225,9 +1273,68 @@ const server = createServer((req, res) => {
       // sync and parse all phases off one process. `--no-media` opts the user
       // out of the inline media phase entirely (Fetch Media stays available
       // for separate, capped runs).
+      //
+      // Once a cancel lands, ft's own wind-down lines ("Interrupted. Saving
+      // sync progress...", the run summary) must not overwrite the
+      // "Cancelling..." step, so every parser returns early.
+      const parseSyncOutput = (chunk) => {
+        if (cancelRequested) return;
+        // Process all lines in the chunk so we don't miss the printed
+        // "Building search index..." transition when it shares a chunk
+        // with the trailing media-spinner frame.
+        const lines = chunk.split(/[\r\n]/).map(s => s.trim()).filter(Boolean);
+        for (const line of lines) {
+          const newMatch = line.match(/(\d+)\s+new/);
+          if (newMatch) {
+            const count = parseInt(newMatch[1], 10);
+            if (Number.isFinite(count) && count >= 0 && count < 1_000_000) {
+              syncStep = STATUS.newBookmarks(count);
+              emitSync();
+            }
+            continue;
+          }
+          const mediaMatch = line.match(/Fetching media.*?(\d+)\s+processed.*?(\d+)\s+downloaded/);
+          if (mediaMatch) {
+            const processed = parseInt(mediaMatch[1], 10);
+            const downloaded = parseInt(mediaMatch[2], 10);
+            if (Number.isFinite(processed) && Number.isFinite(downloaded) && processed >= 0 && processed < 10_000_000) {
+              const next = STATUS.mediaProgress(processed, downloaded);
+              if (next !== null) {
+                syncStep = next;
+                emitSync();
+              }
+            }
+            continue;
+          }
+          if (line.includes("Building search index")) {
+            syncStep = STATUS.indexing;
+            emitSync();
+            continue;
+          }
+        }
+      };
+      // A Sync after an interrupted one resumes first. ft saved a cursor
+      // (see readSyncResumeCursor); a plain `ft sync` would stop at the newest
+      // stored bookmark and clear it, so the pages past the cut-off would
+      // never be fetched. `--continue` walks from the cursor toward older
+      // bookmarks only, so the plain sync still runs afterwards for anything
+      // newer, and its media phase covers what the resumed walk added.
+      // Rebuild is a full walk from the top and supersedes the cursor.
+      const resumed = mode === "all" && readSyncResumeCursor() !== null;
+      if (resumed && !cancelRequested) {
+        syncStep = STATUS.resumingSync;
+        emitSync();
+        await run("ft", ["sync", "--continue", "--no-media"], { onOutput: parseSyncOutput });
+      }
+      // If the resumed walk stopped early again (rate limit, max runtime,
+      // cancel), ft still holds a cursor. Skip the plain sync: its "caught
+      // up" stop would clear that cursor and leave the gap behind for good.
+      // The next Sync resumes again.
+      const stillResuming = resumed && readSyncResumeCursor() !== null;
       if (
         (mode === "all" || mode === "bookmarks-rebuild") &&
-        !cancelRequested
+        !cancelRequested &&
+        !stillResuming
       ) {
         syncStep = STATUS.syncingBookmarks;
         emitSync();
@@ -1241,43 +1348,7 @@ const server = createServer((req, res) => {
           : ["sync"];
         if (s.skipMedia) syncArgs.push("--no-media");
         if (s.skipProfileImages) syncArgs.push("--skip-profile-images");
-        await run("ft", syncArgs, {
-          onOutput: (chunk) => {
-            // Process all lines in the chunk so we don't miss the printed
-            // "Building search index..." transition when it shares a chunk
-            // with the trailing media-spinner frame.
-            const lines = chunk.split(/[\r\n]/).map(s => s.trim()).filter(Boolean);
-            for (const line of lines) {
-              const newMatch = line.match(/(\d+)\s+new/);
-              if (newMatch) {
-                const count = parseInt(newMatch[1], 10);
-                if (Number.isFinite(count) && count >= 0 && count < 1_000_000) {
-                  syncStep = STATUS.newBookmarks(count);
-                  emitSync();
-                }
-                continue;
-              }
-              const mediaMatch = line.match(/Fetching media.*?(\d+)\s+processed.*?(\d+)\s+downloaded/);
-              if (mediaMatch) {
-                const processed = parseInt(mediaMatch[1], 10);
-                const downloaded = parseInt(mediaMatch[2], 10);
-                if (Number.isFinite(processed) && Number.isFinite(downloaded) && processed >= 0 && processed < 10_000_000) {
-                  const next = STATUS.mediaProgress(processed, downloaded);
-                  if (next !== null) {
-                    syncStep = next;
-                    emitSync();
-                  }
-                }
-                continue;
-              }
-              if (line.includes("Building search index")) {
-                syncStep = STATUS.indexing;
-                emitSync();
-                continue;
-              }
-            }
-          }
-        });
+        await run("ft", syncArgs, { onOutput: parseSyncOutput });
       }
       if (mode === "media" && !cancelRequested) {
         syncStep = STATUS.fetchingMedia;
@@ -1297,6 +1368,7 @@ const server = createServer((req, res) => {
         // path in progress.tsx, triggered when `value == null`).
         await run("ft", args, {
           onOutput: (chunk) => {
+            if (cancelRequested) return;
             const lastFrame = chunk.split(/[\r\n]/).map(s => s.trim()).filter(Boolean).pop();
             const m = lastFrame?.match(/(\d+)\s+processed.*?(\d+)\s+downloaded/);
             if (!m) return;
@@ -1327,6 +1399,7 @@ const server = createServer((req, res) => {
         // verified from ft source that --gaps has no interactive prompt.
         await run("ft", ["sync", "--gaps"], {
           onOutput: (chunk) => {
+            if (cancelRequested) return;
             const lastFrame = chunk.split(/[\r\n]/).map(s => s.trim()).filter(Boolean).pop();
             if (!lastFrame) return;
             const m = lastFrame.match(/(\d+)\/(\d+)/);
@@ -1374,11 +1447,16 @@ const server = createServer((req, res) => {
 
   // API: cancel the active ft subprocess. SIGINT on Unix because that's the
   // only signal ft listens for — SIGTERM/SIGHUP just kill the process with no
-  // handler. ft's SIGINT handler does not currently flush in-flight state
-  // (sync cursor, media manifest); tracked at fieldtheory-cli#142. Windows
-  // falls back to SIGTERM since signal semantics differ. 409 if no proc to
-  // cancel (UI disables the button when `canCancel` is false, but defense in
-  // depth).
+  // handler. From ft 1.3.22 the SIGINT handler finishes the in-flight request
+  // and saves the sync cursor / media manifest before exiting (see
+  // FT_GRACEFUL_CANCEL_SINCE). Windows falls back to SIGTERM since signal
+  // semantics differ. 409 if no proc to cancel (UI disables the button when
+  // `canCancel` is false, but defense in depth).
+  //
+  // Exactly one signal per run. ft registers its SIGINT handler with
+  // process.once, so a second SIGINT hits Node's default handler and kills
+  // ft mid-save — losing the progress the first one was saving. A repeat
+  // request while ft winds down is acknowledged and dropped.
   if (path === "/api/sync/cancel") {
     if (req.method !== "POST") {
       res.writeHead(405, { Allow: "POST", "Content-Type": "application/json" });
@@ -1391,7 +1469,14 @@ const server = createServer((req, res) => {
       res.end('{"error":"nothing to cancel"}');
       return;
     }
+    if (cancelRequested) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end('{"ok":true,"alreadyCancelling":true}');
+      return;
+    }
     cancelRequested = true;
+    syncStep = STATUS.cancelling;
+    emitSync();
     // TOCTOU race: 'close' could fire between the `!activeProc` check
     // above and this line, nulling activeProc. kill() can also throw if
     // the proc is mid-exit. Swallow either way — the cancel intent is
@@ -1450,7 +1535,13 @@ const server = createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     const detected = detectFtVersion();
     const ft = detected
-      ? { version: detected.version, status: ftStatus(detected.version), testedMin: FT_TESTED.min, testedMax: FT_TESTED.max }
+      ? {
+          version: detected.version,
+          status: ftStatus(detected.version),
+          testedMin: FT_TESTED.min,
+          testedMax: FT_TESTED.max,
+          cancelSavesProgress: ftCancelSavesProgress(detected.version),
+        }
       : null;
     // `hasData` lets FtGate distinguish "first-time user with nothing" (full
     // FtNotInstalled screen) from "existing user without ft on path" (browse-

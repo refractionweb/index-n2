@@ -91,7 +91,17 @@ export const NAV_TABS: readonly Tab[] = [
 
 export function AppSidebar() {
   const { activeTab, setTab } = useTab();
-  const { running, step, unfetchedCount, canCancel, error: syncError, startSync, cancelSync } = useSync();
+  const {
+    running,
+    step,
+    unfetchedCount,
+    canCancel,
+    cancelling,
+    resumePending,
+    error: syncError,
+    startSync,
+    cancelSync,
+  } = useSync();
   const { bookmarks, reload } = useBookmarks();
   const { settings, update: updateSettings } = useSettings();
   const { info, loaded: infoLoaded } = useAppInfo();
@@ -163,6 +173,11 @@ export function AppSidebar() {
   const idleStatusLines: ReactNode[] = [];
   // Last run's failure leads, so it isn't lost under the routine lines.
   if (syncError) idleStatusLines.push(syncError);
+  // ft saved a cursor from a sync that stopped early; Sync resumes it before
+  // fetching anything newer (server.js, readSyncResumeCursor).
+  if (resumePending && !ftDisabled) {
+    idleStatusLines.push("Last sync stopped early. Sync resumes it.");
+  }
   if (ftStatus === "missing") {
     idleStatusLines.push(
       "ft is not detected. Sync is disabled.",
@@ -180,23 +195,24 @@ export function AppSidebar() {
     ? (step || "Syncing...").split("\n")
     : idleStatusLines;
 
-  // Cancel during ft's media phase leaves orphaned files on disk (downloaded
-  // but not in manifest, since ft only writes the manifest at end of batch —
-  // bookmark-media.ts:499 + SIGINT handler doesn't flush, tracked at
-  // fieldtheory-cli#142). Cancel during the bookmarks/indexing phases is safe
-  // (line-atomic jsonl + per-batch DB transactions). Detect media via the
-  // `STATUS.mediaProgress` shape ("N downloaded" / "K failed") and the brief
-  // `STATUS.fetchingMedia` transition.
+  // Before ft 1.3.22 (and on Windows, where cancel is SIGTERM), cancelling
+  // ft's media phase leaves orphaned files on disk: downloaded but not in
+  // the manifest, because ft exits without writing it (fieldtheory-cli#142),
+  // so they're fetched again next run. From 1.3.22 ft finishes the current
+  // file and writes the manifest on SIGINT, and the warning would be wrong.
+  // Detect the media phase via the `STATUS.mediaProgress` shape ("N
+  // downloaded" / "K failed") and the brief `STATUS.fetchingMedia` transition.
   const isMediaPhase =
     !!step?.match(/\d+ (downloaded|failed)/) ||
     !!step?.startsWith("Fetching media");
+  const cancelLosesMedia = !info?.ft?.cancelSavesProgress;
 
   // Render the actual command lines the buttons will spawn — useful for power
   // users debugging what the GUI is doing, and stays accurate when the user
   // changes mediaFetchLimit / skipProfileImages / skipMedia.
-  const syncCmd = `ft sync${settings.skipMedia ? " --no-media" : ""}${
-    settings.skipProfileImages ? " --skip-profile-images" : ""
-  }`;
+  const syncCmd = `${resumePending ? "ft sync --continue --no-media; " : ""}ft sync${
+    settings.skipMedia ? " --no-media" : ""
+  }${settings.skipProfileImages ? " --skip-profile-images" : ""}`;
   const fetchMediaCmd = `ft fetch-media${
     settings.mediaFetchLimit > 0 ? ` --limit ${settings.mediaFetchLimit}` : ""
   }${settings.skipProfileImages ? " --skip-profile-images" : ""}`;
@@ -209,7 +225,7 @@ export function AppSidebar() {
   const noBookmarks = !bookmarks || bookmarks.length === 0;
 
   const handleCancelClick = () => {
-    if (isMediaPhase && !settings.cancelMediaWarningSuppressed) {
+    if (isMediaPhase && cancelLosesMedia && !settings.cancelMediaWarningSuppressed) {
       setDontShowAgain(false);
       setConfirmOpen(true);
     } else {
@@ -488,6 +504,13 @@ export function AppSidebar() {
               </DropdownMenuContent>
             </DropdownMenu>
           </ButtonGroup>
+        ) : cancelling ? (
+          // One cancel per run: ft is saving its progress, and a second
+          // SIGINT would kill it mid-save.
+          <Button variant="outline" size="sm" className="w-full" disabled>
+            <Spinner data-icon="inline-start" />
+            <span className="truncate">Cancelling...</span>
+          </Button>
         ) : canCancel ? (
           <Button
             variant="outline"

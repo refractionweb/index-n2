@@ -21,7 +21,8 @@ export type Settings = {
   theme: Theme;
   // Suppresses the "files will be re-downloaded" confirmation when cancelling
   // an in-flight `ft fetch-media`. Set to true when the user ticks "Don't show
-  // this again" in the cancel dialog.
+  // this again" in the cancel dialog. The dialog only appears where a cancel
+  // loses the media manifest: ft older than 1.3.22, or Windows.
   cancelMediaWarningSuppressed: boolean;
   // Suppresses the "no batch limit set — fetch may take a while" warning
   // shown before Sync (when skipMedia is off) and Fetch Media (when

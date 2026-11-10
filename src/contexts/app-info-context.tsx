@@ -23,6 +23,9 @@ export type FtInfo = {
   status: FtStatus;
   testedMin: string;
   testedMax: string;
+  // Whether cancelling keeps ft's progress (sync cursor, media manifest):
+  // ft ≥ 1.3.22 on macOS / Linux. Absent on older servers.
+  cancelSavesProgress?: boolean;
 };
 
 export type AppInfo = {

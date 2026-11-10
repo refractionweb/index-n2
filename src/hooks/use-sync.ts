@@ -9,6 +9,13 @@ export type SyncState = {
   // no subprocess to kill and the rebuild is short enough (~1s cached,
   // ~30s cold) that waiting through it is fine.
   canCancel: boolean;
+  // Cancel was sent and ft is still saving its progress before it exits.
+  // The UI shows "Cancelling..." instead of a second Cancel: another SIGINT
+  // would kill ft mid-save.
+  cancelling: boolean;
+  // ft holds a resume cursor from a sync that stopped early (cancel, rate
+  // limit, max runtime). The next Sync runs `ft sync --continue` first.
+  resumePending: boolean;
   // Failure line from the last run ("ft sync: exited with code 1"), or
   // null. Server-side state, cleared when the next run starts. Also carries
   // a rejected /api/sync request (see startSync), which the server never
@@ -21,6 +28,8 @@ const INITIAL: SyncState = {
   step: null,
   unfetchedCount: 0,
   canCancel: false,
+  cancelling: false,
+  resumePending: false,
   error: null,
 };
 

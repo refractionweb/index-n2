@@ -48,6 +48,8 @@ ft's data directory is treated as read-only. The GUI never writes, deletes, or m
 | Fetch Media       | `ft fetch-media --limit N`      |
 | Rebuild Bookmarks | `ft sync --rebuild --yes`       |
 
+When the previous sync stopped early (cancelled, rate limited, or at ft's 30-minute cap), Sync first runs `ft sync --continue --no-media` to finish that walk from ft's saved position, then the regular `ft sync`. A plain `ft sync` alone would stop at the newest stored bookmark and discard the saved position.
+
 ### GUI-original
 
 - **Color filter.** A dominant palette is extracted per image (median-cut RGB quantization, palette stored in Lab D65 for matching) and cached on disk. A picked hex matches palette entries via population-weighted ΔE with a lightness-aware threshold; a separate mono mode matches images whose chroma falls below ~12.
@@ -126,14 +128,15 @@ The server is a localhost-only Node process. Defenses:
 - **Path traversal + symlink escape guard.** Every static-file request — `/media/`, `/thumbs/`, and the SPA bundle in `dist/` — is resolved lexically, then `realpath`-validated to lie under its base directory.
 - **Media extension whitelist.** Image and video formats only — no SVG, no HTML.
 - **Strict CSP.** No remote scripts; the only inline script is hash-allowlisted. Styles, images, fonts, and media follow standard SPA carve-outs.
-- **Subprocess discipline.** Spawned `ft` processes time out at 5 min idle (not wall-clock). Cancel sends SIGINT on Unix.
+- **Subprocess discipline.** Spawned `ft` processes time out after 5 min without output (not wall-clock), or 20 min once a cancel is requested, so ft can finish saving. Cancel sends one SIGINT on Unix and SIGTERM on Windows.
 
 No remote endpoints are contacted. All media is read from ft's `media/` directory, which ft itself populates.
 
 ## Limitations
 
 - Categories are read-only. No in-app classification editor.
-- Cancelling `ft fetch-media` mid-run leaves orphaned files on disk: ft writes its manifest at end-of-run, so a cancelled batch's downloads are invisible to ft and re-fetched next time. Bandwidth waste, no corruption. Tracked upstream.
+- With ft older than 1.3.22, or on Windows, cancelling a media fetch leaves orphaned files on disk: ft exits without writing its manifest, so that batch's downloads are fetched again next time. Bandwidth waste, no corruption. ft 1.3.22 on macOS and Linux finishes the current file and saves the manifest on cancel.
+- Cancelling Backfill Gaps (`ft sync --gaps`) exits immediately in every ft version. ft saves gaps progress every 100 records, so up to 99 are checked again next run.
 - A small set of permanently unfetchable URLs (deleted tweets, protected accounts) keep the "N unfetched" badge non-zero.
 
 ## Development
