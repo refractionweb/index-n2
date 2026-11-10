@@ -1,7 +1,8 @@
 export function fmtNum(n: number | null | undefined): string {
   if (!n) return "0";
   if (n < 1000) return String(n);
-  if (n < 1_000_000) {
+  // 999,500 and up would round to "1000K"; they read as "1M".
+  if (n < 999_500) {
     const val = n / 1000;
     return val < 10 ? val.toFixed(1).replace(/\.0$/, "") + "K" : Math.round(val) + "K";
   }
