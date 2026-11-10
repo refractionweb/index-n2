@@ -70,9 +70,9 @@ Persisted in `~/.index-n2/settings.json`. Edit through the gear icon in the side
 | `theme`             | system  | system / light / dark                               |
 | `autoplayVideos`    | true    | Auto-start videos in the lightbox                   |
 | `autoOpenBrowser`   | true    | Open a browser tab on startup (restart to apply)    |
-| `skipMedia`         | false   | Sync runs `ft sync --no-media` (bookmarks only)     |
+| `skipMedia`         | false   | Sync and Backfill Gaps pass `--no-media` (no media phase) |
 | `mediaFetchLimit`   | 0       | Cap for `ft fetch-media --limit`. 0 disables it.    |
-| `skipProfileImages` | false   | Adds `--skip-profile-images` to `ft fetch-media`    |
+| `skipProfileImages` | false   | Adds `--skip-profile-images` to Sync, Fetch Media, and Backfill Gaps |
 | `hideUnfetched`     | false   | Hide bookmarks with media pending download          |
 
 Two additional keys are flipped by "Don't show this again" checkboxes on confirmation dialogs, not the gear icon: `cancelMediaWarningSuppressed` (cancel fetch-media) and `noLimitWarningSuppressed` (no-batch-limit warning shown before unbounded Sync / Fetch Media). Reset to Defaults clears all nine.

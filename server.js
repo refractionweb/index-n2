@@ -903,6 +903,12 @@ const STATUS = {
   idleKilled:  (label, minutes) => `${label}: no output for ${minutes} min, stopped`,
   pipelineError: "Sync failed. See server log.",
   newBookmarks:    (n)              => `${n} new bookmarks`,
+  // ft's scan past the old 10k cap: on archives of 9,500+ bookmarks, an
+  // incremental sync that caught up keeps paging through the whole archive
+  // (auto-continue in ft's graphql-bookmarks.ts; up to ft's 30-minute cap).
+  // Counted in pages, not bookmarks.
+  scanningArchive:  "Scanning archive...",
+  scanProgress:     (done, total) => `${done}/${total} archive pages scanned`,
   // Media-phase live progress. ft's spinner emits "N processed │ M downloaded";
   // we surface the two outcome counts directly — downloaded and failed
   // (failed derived as processed - downloaded). Mirrors ft's own end-of-run
@@ -1314,7 +1320,30 @@ const server = createServer((req, res) => {
         // with the trailing media-spinner frame.
         const lines = chunk.split(/[\r\n]/).map(s => s.trim()).filter(Boolean);
         for (const line of lines) {
-          const newMatch = line.match(/(\d+)\s+new/);
+          // Archive scan frames come first: they also carry "N new", which
+          // would otherwise show a static "0 new bookmarks" for the whole
+          // scan. ft formats the start-line count with toLocaleString.
+          const scanMatch = line.match(/scanning past existing bookmarks \((\d+)\/~(\d+)\)/);
+          if (scanMatch) {
+            const done = parseInt(scanMatch[1], 10);
+            const total = parseInt(scanMatch[2], 10);
+            if (Number.isFinite(done) && Number.isFinite(total) && total > 0) {
+              syncStep = STATUS.scanProgress(Math.min(done, total), total);
+              emitSync();
+            }
+            continue;
+          }
+          if (/scanning past [\d,.\s  ]+ existing bookmarks/.test(line)) {
+            syncStep = STATUS.scanningArchive;
+            emitSync();
+            continue;
+          }
+          // Only the bookmark spinner ("N new  │  page M") and ft's summary
+          // ("✓ N new bookmarks synced (T total)"). A bare "N new" also hits
+          // the index line ("✓ T bookmarks indexed (K new)"), folder
+          // summaries ("<name>  a new, b tagged"), and any folder or text
+          // that happens to contain "10 newsletters".
+          const newMatch = line.match(/(\d+)\s+new(?:\s+│|\s+bookmarks synced)/);
           if (newMatch) {
             const count = parseInt(newMatch[1], 10);
             if (Number.isFinite(count) && count >= 0 && count < 1_000_000) {
@@ -1427,11 +1456,29 @@ const server = createServer((req, res) => {
         // output has no other slash-separated digit pair. Then split on │
         // to pick up the labelled breakdown segments. No --yes needed —
         // verified from ft source that --gaps has no interactive prompt.
-        await run("ft", ["sync", "--gaps"], {
+        //
+        // ft runs a media phase after the gaps pass unless --no-media, and
+        // it honors --skip-profile-images there, so the two media settings
+        // apply here as they do to Sync. Its media spinner frames carry no
+        // X/Y pair, so they're matched first and shown as media progress.
+        const s = getSettings();
+        const gapsArgs = ["sync", "--gaps"];
+        if (s.skipMedia) gapsArgs.push("--no-media");
+        if (s.skipProfileImages) gapsArgs.push("--skip-profile-images");
+        await run("ft", gapsArgs, {
           onOutput: (chunk) => {
             if (cancelRequested) return;
             const lastFrame = chunk.split(/[\r\n]/).map(s => s.trim()).filter(Boolean).pop();
             if (!lastFrame) return;
+            const mm = lastFrame.match(/Fetching media.*?(\d+)\s+processed.*?(\d+)\s+downloaded/);
+            if (mm) {
+              const next = STATUS.mediaProgress(parseInt(mm[1], 10), parseInt(mm[2], 10));
+              if (next !== null) {
+                syncStep = next;
+                emitSync();
+              }
+              return;
+            }
             const m = lastFrame.match(/(\d+)\/(\d+)/);
             if (!m) return;
             const done = parseInt(m[1], 10);

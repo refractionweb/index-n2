@@ -213,6 +213,9 @@ export function AppSidebar() {
   const syncCmd = `${resumePending ? "ft sync --continue --no-media; " : ""}ft sync${
     settings.skipMedia ? " --no-media" : ""
   }${settings.skipProfileImages ? " --skip-profile-images" : ""}`;
+  const gapsCmd = `ft sync --gaps${settings.skipMedia ? " --no-media" : ""}${
+    settings.skipProfileImages ? " --skip-profile-images" : ""
+  }`;
   const fetchMediaCmd = `ft fetch-media${
     settings.mediaFetchLimit > 0 ? ` --limit ${settings.mediaFetchLimit}` : ""
   }${settings.skipProfileImages ? " --skip-profile-images" : ""}`;
@@ -480,7 +483,7 @@ export function AppSidebar() {
                       ? ftDisabledTooltip("Backfill Gaps")
                       : noBookmarks
                         ? "No bookmarks yet — sync first"
-                        : "ft sync --gaps"}
+                        : gapsCmd}
                   </TooltipContent>
                 </Tooltip>
                 <Tooltip>
