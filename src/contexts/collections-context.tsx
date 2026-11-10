@@ -3,9 +3,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -21,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useTab } from "@/contexts/tab-context";
+import { useServerDocument } from "@/hooks/use-server-document";
 import { collectionIdOf } from "@/lib/tabs";
 
 // A collection is a user-named, non-exclusive set of bookmark IDs. Unlike
@@ -94,57 +93,32 @@ type Prompt =
   | { mode: "create"; onCreated?: (c: Collection) => void }
   | { mode: "rename"; id: string; initial: string };
 
+const EMPTY_LIST: readonly Collection[] = [];
+
+function parseCollections(json: unknown): readonly Collection[] {
+  if (!Array.isArray(json)) throw new Error("expected collection[]");
+  return (json as Wire[]).map(fromWire);
+}
+
+function serializeCollections(list: readonly Collection[]): Wire[] {
+  return list.map(toWire);
+}
+
 export function CollectionsProvider({ children }: { children: ReactNode }) {
-  const [collections, setCollections] = useState<Collection[]>([]);
-  // Ref mirror + serialized POST chain: same rationale as HiddenProvider.
-  // Two synchronous mutations must both see the latest state, and two
-  // in-flight POSTs must land in order since the server stores the last
-  // body it receives.
-  const ref = useRef<Collection[]>([]);
-  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+  // Load / save / failure handling: see useServerDocument.
+  const {
+    value: collections,
+    mutate,
+    current,
+  } = useServerDocument({
+    url: "/api/collections",
+    label: "collections",
+    empty: EMPTY_LIST,
+    parse: parseCollections,
+    serialize: serializeCollections,
+  });
   const { activeTab, setTab } = useTab();
   const [prompt, setPrompt] = useState<Prompt | null>(null);
-
-  const resyncFromServer = useCallback(() => {
-    return fetch("/api/collections")
-      .then((r) => r.json())
-      .then((list: Wire[]) => {
-        const next = list.map(fromWire);
-        ref.current = next;
-        setCollections(next);
-      });
-  }, []);
-
-  useEffect(() => {
-    resyncFromServer().catch((e) =>
-      console.error("Failed to load collections:", e),
-    );
-  }, [resyncFromServer]);
-
-  const persist = useCallback(
-    (next: Collection[]) => {
-      ref.current = next;
-      setCollections(next);
-      chainRef.current = chainRef.current.then(async () => {
-        try {
-          const res = await fetch("/api/collections", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(next.map(toWire)),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        } catch (e) {
-          console.error("Failed to persist collections:", e);
-          try {
-            await resyncFromServer();
-          } catch (e2) {
-            console.error("Failed to resync after persist error:", e2);
-          }
-        }
-      });
-    },
-    [resyncFromServer],
-  );
 
   const create = useCallback(
     (name: string): Collection => {
@@ -155,40 +129,42 @@ export function CollectionsProvider({ children }: { children: ReactNode }) {
         hidden: false,
         ids: new Set(),
       };
-      persist([...ref.current, c]);
+      mutate((list) => [...list, c]);
       return c;
     },
-    [persist],
+    [mutate],
   );
 
   const rename = useCallback(
     (id: string, name: string) => {
       const trimmed = name.trim();
       if (!trimmed) return;
-      persist(ref.current.map((c) => (c.id === id ? { ...c, name: trimmed } : c)));
+      mutate((list) =>
+        list.map((c) => (c.id === id ? { ...c, name: trimmed } : c)),
+      );
     },
-    [persist],
+    [mutate],
   );
 
   const setHidden = useCallback(
     (id: string, hidden: boolean) => {
-      persist(ref.current.map((c) => (c.id === id ? { ...c, hidden } : c)));
+      mutate((list) => list.map((c) => (c.id === id ? { ...c, hidden } : c)));
     },
-    [persist],
+    [mutate],
   );
 
   const remove = useCallback(
     (id: string) => {
-      persist(ref.current.filter((c) => c.id !== id));
+      mutate((list) => list.filter((c) => c.id !== id));
       if (collectionIdOf(activeTab) === id) setTab("home");
     },
-    [persist, activeTab, setTab],
+    [mutate, activeTab, setTab],
   );
 
   const add = useCallback(
     (collectionId: string, bookmarkIds: string[]) => {
-      persist(
-        ref.current.map((c) => {
+      mutate((list) =>
+        list.map((c) => {
           if (c.id !== collectionId) return c;
           const ids = new Set(c.ids);
           for (const b of bookmarkIds) ids.add(b);
@@ -196,13 +172,13 @@ export function CollectionsProvider({ children }: { children: ReactNode }) {
         }),
       );
     },
-    [persist],
+    [mutate],
   );
 
   const removeFrom = useCallback(
     (collectionId: string, bookmarkIds: string[]) => {
-      persist(
-        ref.current.map((c) => {
+      mutate((list) =>
+        list.map((c) => {
           if (c.id !== collectionId) return c;
           const ids = new Set(c.ids);
           for (const b of bookmarkIds) ids.delete(b);
@@ -210,17 +186,20 @@ export function CollectionsProvider({ children }: { children: ReactNode }) {
         }),
       );
     },
-    [persist],
+    [mutate],
   );
 
   const promptCreate = useCallback(
     (onCreated?: (c: Collection) => void) => setPrompt({ mode: "create", onCreated }),
     [],
   );
-  const promptRename = useCallback((id: string) => {
-    const c = ref.current.find((x) => x.id === id);
-    if (c) setPrompt({ mode: "rename", id, initial: c.name });
-  }, []);
+  const promptRename = useCallback(
+    (id: string) => {
+      const c = current().find((x) => x.id === id);
+      if (c) setPrompt({ mode: "rename", id, initial: c.name });
+    },
+    [current],
+  );
 
   const byId = useMemo(
     () => new Map(collections.map((c) => [c.id, c])),

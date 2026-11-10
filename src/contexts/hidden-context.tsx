@@ -3,12 +3,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useRef,
-  useState,
   type ReactNode,
 } from "react";
+import { useServerDocument } from "@/hooks/use-server-document";
 
 type HiddenValue = {
   hiddenIds: ReadonlySet<string>;
@@ -19,84 +17,45 @@ type HiddenValue = {
 
 const HiddenContext = createContext<HiddenValue | null>(null);
 
+const EMPTY: ReadonlySet<string> = new Set();
+
+function parseArchive(json: unknown): ReadonlySet<string> {
+  if (!Array.isArray(json)) throw new Error("expected string[]");
+  return new Set(json.filter((x): x is string => typeof x === "string"));
+}
+
+function serializeArchive(ids: ReadonlySet<string>): string[] {
+  return [...ids];
+}
+
 export function HiddenProvider({ children }: { children: ReactNode }) {
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
-  // Ref-tracked mirror of hiddenIds so two synchronous archive()/restore()
-  // calls both read the latest computed state. Without this, React's async
-  // setState lets two rapid clicks share the same pre-change closure value:
-  // the second call's `next` is built from stale `hiddenIds`, omits the
-  // first call's id, and that id is lost on disk after both POSTs land.
-  const hiddenIdsRef = useRef<Set<string>>(new Set());
-  // Serialize POSTs through a promise chain. Without this, two in-flight
-  // requests can resolve out of order — the later POST's body overwrites
-  // the earlier one's on disk even when the user expected the later state
-  // to win, because the server just stores whatever payload it received last.
-  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
-
-  const resyncFromServer = useCallback(() => {
-    return fetch("/api/archive")
-      .then((r) => r.json())
-      .then((ids: string[]) => {
-        const set = new Set(ids);
-        hiddenIdsRef.current = set;
-        setHiddenIds(set);
-      });
-  }, []);
-
-  useEffect(() => {
-    resyncFromServer().catch((e) =>
-      console.error("Failed to load hidden bookmarks:", e),
-    );
-  }, [resyncFromServer]);
-
-  const persist = useCallback(
-    (next: Set<string>) => {
-      hiddenIdsRef.current = next;
-      setHiddenIds(next);
-      chainRef.current = chainRef.current.then(async () => {
-        try {
-          const res = await fetch("/api/archive", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify([...next]),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        } catch (e) {
-          console.error("Failed to persist hidden bookmarks:", e);
-          // Snap UI back to disk truth on failure. Without this, the
-          // optimistic state lies until the next reload — user thinks the
-          // archive took when it didn't. Resyncing means the bookmark
-          // visibly un-archives itself, which is an honest signal even
-          // without a toast surface. If the resync also fails (server
-          // unreachable), we log and leave the optimistic state — the user
-          // will see the truth on next successful resync or page reload.
-          try {
-            await resyncFromServer();
-          } catch (e2) {
-            console.error("Failed to resync after persist error:", e2);
-          }
-        }
-      });
-    },
-    [resyncFromServer],
-  );
+  // Load / save / failure handling: see useServerDocument.
+  const { value: hiddenIds, mutate } = useServerDocument({
+    url: "/api/archive",
+    label: "archive",
+    empty: EMPTY,
+    parse: parseArchive,
+    serialize: serializeArchive,
+  });
 
   const archive = useCallback(
-    (ids: string[]) => {
-      const next = new Set(hiddenIdsRef.current);
-      for (const id of ids) next.add(id);
-      persist(next);
-    },
-    [persist],
+    (ids: string[]) =>
+      mutate((current) => {
+        const next = new Set(current);
+        for (const id of ids) next.add(id);
+        return next;
+      }),
+    [mutate],
   );
 
   const restore = useCallback(
-    (ids: string[]) => {
-      const next = new Set(hiddenIdsRef.current);
-      for (const id of ids) next.delete(id);
-      persist(next);
-    },
-    [persist],
+    (ids: string[]) =>
+      mutate((current) => {
+        const next = new Set(current);
+        for (const id of ids) next.delete(id);
+        return next;
+      }),
+    [mutate],
   );
 
   const isHidden = useCallback(

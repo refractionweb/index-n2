@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
-import { readFileSync, createReadStream, existsSync, statSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
+import { readFileSync, createReadStream, existsSync, statSync, mkdirSync, readdirSync, realpathSync, renameSync } from "node:fs";
 import { atomicWriteFileSync } from "./atomic-write.js";
 import { join, resolve, sep, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -990,6 +990,21 @@ async function getBookmarks() {
   return cachedBookmarks;
 }
 
+// archived.json and collections.json are replaced whole on every save, and
+// their GET handlers serve an unreadable file (corrupt, or valid JSON that
+// isn't an array) as empty. Set such a file aside before the next save
+// would overwrite it, so a manual edit gone wrong or an interrupted cloud
+// sync stays recoverable.
+function preserveUnreadable(path) {
+  if (!existsSync(path)) return;
+  try {
+    if (Array.isArray(JSON.parse(readFileSync(path, "utf-8")))) return;
+  } catch {}
+  const aside = `${path}.unreadable-${Date.now()}`;
+  renameSync(path, aside);
+  console.warn(`${basename(path)} unreadable, moved to ${tildify(aside)}`);
+}
+
 const MIME = {
   ".html": "text/html",
   ".js": "text/javascript",
@@ -1502,6 +1517,8 @@ const server = createServer((req, res) => {
         try { ids = JSON.parse(readFileSync(archivedPath, "utf-8")); }
         catch (e) { console.error("archived.json unreadable, returning empty:", e.message); }
       }
+      // Valid JSON of the wrong shape ({}, a string) is unreadable too.
+      ids = Array.isArray(ids) ? ids.filter((x) => typeof x === "string") : [];
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(ids));
       return;
@@ -1549,6 +1566,7 @@ const server = createServer((req, res) => {
             return;
           }
           if (!existsSync(join(CACHE_DIR))) mkdirSync(join(CACHE_DIR), { recursive: true });
+          preserveUnreadable(archivedPath);
           atomicWriteFileSync(archivedPath, JSON.stringify(parsed));
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end('{"ok":true}');
@@ -1638,6 +1656,7 @@ const server = createServer((req, res) => {
             ids: [...new Set(c.ids)],
           }));
           if (!existsSync(join(CACHE_DIR))) mkdirSync(join(CACHE_DIR), { recursive: true });
+          preserveUnreadable(collectionsPath);
           atomicWriteFileSync(collectionsPath, JSON.stringify(clean));
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end('{"ok":true}');
