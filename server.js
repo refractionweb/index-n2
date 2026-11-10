@@ -908,7 +908,14 @@ const STATUS = {
   // (auto-continue in ft's graphql-bookmarks.ts; up to ft's 30-minute cap).
   // Counted in pages, not bookmarks.
   scanningArchive:  "Scanning archive...",
-  scanProgress:     (done, total) => `${done}/${total} archive pages scanned`,
+  // ft's page estimate comes from the first page's size, and the real walk
+  // can run past it; past the estimate the line drops the total, so the bar
+  // goes indeterminate instead of overflowing.
+  scanProgress:     (done, total, newCount) => {
+    const lines = [done <= total ? `${done}/${total} archive pages scanned` : `${done} archive pages scanned`];
+    if (newCount > 0) lines.push(`${newCount} new bookmarks`);
+    return lines.join("\n");
+  },
   // Media-phase live progress. ft's spinner emits "N processed │ M downloaded";
   // we surface the two outcome counts directly — downloaded and failed
   // (failed derived as processed - downloaded). Mirrors ft's own end-of-run
@@ -1313,64 +1320,92 @@ const server = createServer((req, res) => {
       // Once a cancel lands, ft's own wind-down lines ("Interrupted. Saving
       // sync progress...", the run summary) must not overwrite the
       // "Cancelling..." step, so every parser returns early.
-      const parseSyncOutput = (chunk) => {
-        if (cancelRequested) return;
-        // Process all lines in the chunk so we don't miss the printed
-        // "Building search index..." transition when it shares a chunk
-        // with the trailing media-spinner frame.
-        const lines = chunk.split(/[\r\n]/).map(s => s.trim()).filter(Boolean);
-        for (const line of lines) {
-          // Archive scan frames come first: they also carry "N new", which
-          // would otherwise show a static "0 new bookmarks" for the whole
-          // scan. ft formats the start-line count with toLocaleString.
-          const scanMatch = line.match(/scanning past existing bookmarks \((\d+)\/~(\d+)\)/);
-          if (scanMatch) {
-            const done = parseInt(scanMatch[1], 10);
-            const total = parseInt(scanMatch[2], 10);
-            if (Number.isFinite(done) && Number.isFinite(total) && total > 0) {
-              syncStep = STATUS.scanProgress(Math.min(done, total), total);
-              emitSync();
+      //
+      // One parser per ft run: the archive-scan state below must not carry
+      // from the --continue run into the plain sync.
+      const makeSyncOutputParser = () => {
+        // ft's archive scan (see STATUS.scanProgress). ft prints its scan
+        // line only while the scan has added nothing; once it adds, its
+        // spinner falls back to the plain "N new  │  page P" frame, which
+        // carries the absolute page. The scan starts on the main loop's last
+        // page, so scanned = P - startPage.
+        let lastPage = 0;
+        let scan = null; // { startPage, total }
+        // Push a step only when it changes: the spinner redraws every 80 ms,
+        // and each redraw used to emit an identical SSE frame.
+        const setStep = (next) => {
+          if (next === syncStep) return;
+          syncStep = next;
+          emitSync();
+        };
+        return (chunk) => {
+          if (cancelRequested) return;
+          // Process all lines in the chunk so we don't miss the printed
+          // "Building search index..." transition when it shares a chunk
+          // with the trailing media-spinner frame.
+          const lines = chunk.split(/[\r\n]/).map(s => s.trim()).filter(Boolean);
+          for (const line of lines) {
+            // Scan start: "scanning past 9,563 existing bookmarks (~479
+            // pages)...". ft formats the count with toLocaleString.
+            const scanStart = line.match(/scanning past [\d,.\s\u00a0\u202f]+ existing bookmarks \(~(\d+) pages\)/);
+            if (scanStart) {
+              scan = { startPage: lastPage, total: parseInt(scanStart[1], 10) };
+              setStep(STATUS.scanningArchive);
+              continue;
             }
-            continue;
-          }
-          if (/scanning past [\d,.\s  ]+ existing bookmarks/.test(line)) {
-            syncStep = STATUS.scanningArchive;
-            emitSync();
-            continue;
-          }
-          // Only the bookmark spinner ("N new  │  page M") and ft's summary
-          // ("✓ N new bookmarks synced (T total)"). A bare "N new" also hits
-          // the index line ("✓ T bookmarks indexed (K new)"), folder
-          // summaries ("<name>  a new, b tagged"), and any folder or text
-          // that happens to contain "10 newsletters".
-          const newMatch = line.match(/(\d+)\s+new(?:\s+│|\s+bookmarks synced)/);
-          if (newMatch) {
-            const count = parseInt(newMatch[1], 10);
-            if (Number.isFinite(count) && count >= 0 && count < 1_000_000) {
-              syncStep = STATUS.newBookmarks(count);
-              emitSync();
-            }
-            continue;
-          }
-          const mediaMatch = line.match(/Fetching media.*?(\d+)\s+processed.*?(\d+)\s+downloaded/);
-          if (mediaMatch) {
-            const processed = parseInt(mediaMatch[1], 10);
-            const downloaded = parseInt(mediaMatch[2], 10);
-            if (Number.isFinite(processed) && Number.isFinite(downloaded) && processed >= 0 && processed < 10_000_000) {
-              const next = STATUS.mediaProgress(processed, downloaded);
-              if (next !== null) {
-                syncStep = next;
-                emitSync();
+            // Scan with nothing added yet: "scanning past existing bookmarks
+            // (k/~M)...  │  N new  │  Ts".
+            const scanMatch = line.match(/scanning past existing bookmarks \((\d+)\/~(\d+)\)/);
+            if (scanMatch) {
+              const done = parseInt(scanMatch[1], 10);
+              const total = parseInt(scanMatch[2], 10);
+              const n = parseInt(line.match(/(\d+)\s+new\s+│/)?.[1] ?? "0", 10);
+              if (!scan) scan = { startPage: lastPage, total };
+              if (Number.isFinite(done) && Number.isFinite(total) && total > 0) {
+                setStep(STATUS.scanProgress(done, total, n));
               }
+              continue;
             }
-            continue;
+            // Bookmark spinner: "Syncing bookmarks...  N new  │  page P  │  Ts".
+            // During a scan that has added something, this is also the scan's
+            // frame.
+            const frame = line.match(/(\d+)\s+new\s+│\s+page\s+(\d+)/);
+            if (frame) {
+              const n = parseInt(frame[1], 10);
+              const page = parseInt(frame[2], 10);
+              if (Number.isFinite(page)) lastPage = page;
+              if (scan) setStep(STATUS.scanProgress(Math.max(0, page - scan.startPage), scan.total, n));
+              else if (Number.isFinite(n) && n >= 0 && n < 1_000_000) setStep(STATUS.newBookmarks(n));
+              continue;
+            }
+            // ft's summary: "✓ N new bookmarks synced (T total)". Only this
+            // and the spinner count as "N new": a bare "N new" also hits the
+            // index line ("✓ T bookmarks indexed (K new)"), folder summaries
+            // ("<name>  a new, b tagged"), and folder names like
+            // "10 newsletters".
+            const summary = line.match(/(\d+)\s+new\s+bookmarks synced/);
+            if (summary) {
+              const n = parseInt(summary[1], 10);
+              if (Number.isFinite(n) && n >= 0 && n < 1_000_000) setStep(STATUS.newBookmarks(n));
+              continue;
+            }
+            const mediaMatch = line.match(/Fetching media.*?(\d+)\s+processed.*?(\d+)\s+downloaded/);
+            if (mediaMatch) {
+              const processed = parseInt(mediaMatch[1], 10);
+              const downloaded = parseInt(mediaMatch[2], 10);
+              if (Number.isFinite(processed) && Number.isFinite(downloaded) && processed >= 0 && processed < 10_000_000) {
+                // Nothing resolved yet: still say the media phase started,
+                // rather than leaving the last bookmark count up.
+                setStep(STATUS.mediaProgress(processed, downloaded) ?? STATUS.fetchingMedia);
+              }
+              continue;
+            }
+            if (line.includes("Building search index")) {
+              setStep(STATUS.indexing);
+              continue;
+            }
           }
-          if (line.includes("Building search index")) {
-            syncStep = STATUS.indexing;
-            emitSync();
-            continue;
-          }
-        }
+        };
       };
       // A Sync after an interrupted one resumes first. ft saved a cursor
       // (see readSyncResumeCursor); a plain `ft sync` would stop at the newest
@@ -1383,7 +1418,7 @@ const server = createServer((req, res) => {
       if (resumed && !cancelRequested) {
         syncStep = STATUS.resumingSync;
         emitSync();
-        await run("ft", ["sync", "--continue", "--no-media"], { onOutput: parseSyncOutput });
+        await run("ft", ["sync", "--continue", "--no-media"], { onOutput: makeSyncOutputParser() });
       }
       // If the resumed walk stopped early again (rate limit, max runtime,
       // cancel), ft still holds a cursor. Skip the plain sync: its "caught
@@ -1407,7 +1442,7 @@ const server = createServer((req, res) => {
           : ["sync"];
         if (s.skipMedia) syncArgs.push("--no-media");
         if (s.skipProfileImages) syncArgs.push("--skip-profile-images");
-        await run("ft", syncArgs, { onOutput: parseSyncOutput });
+        await run("ft", syncArgs, { onOutput: makeSyncOutputParser() });
       }
       if (mode === "media" && !cancelRequested) {
         syncStep = STATUS.fetchingMedia;
