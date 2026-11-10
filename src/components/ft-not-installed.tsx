@@ -2,20 +2,18 @@
 // that fieldtheory-cli isn't on PATH. Replaces the entire UI — no sidebar,
 // no top bar — because nothing in the rest of the app works without ft.
 
-import { useState } from "react";
-import { RiCheckLine, RiFileCopyLine } from "@remixicon/react";
+import {
+  RiCheckLine,
+  RiErrorWarningLine,
+  RiFileCopyLine,
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
+import { useCopyFeedback } from "@/lib/clipboard";
 
 const INSTALL_CMD = "npm install -g fieldtheory";
 
 export function FtNotInstalled() {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(INSTALL_CMD);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
+  const { state, copy } = useCopyFeedback(1500);
 
   return (
     <div className="flex h-svh items-center justify-center p-8">
@@ -30,10 +28,22 @@ export function FtNotInstalled() {
           <Button
             variant="outline"
             size="icon-sm"
-            onClick={handleCopy}
-            aria-label={copied ? "Copied" : "Copy install command"}
+            onClick={() => void copy(INSTALL_CMD)}
+            aria-label={
+              state === "copied"
+                ? "Copied"
+                : state === "failed"
+                  ? "Copy failed"
+                  : "Copy install command"
+            }
           >
-            {copied ? <RiCheckLine /> : <RiFileCopyLine />}
+            {state === "copied" ? (
+              <RiCheckLine />
+            ) : state === "failed" ? (
+              <RiErrorWarningLine />
+            ) : (
+              <RiFileCopyLine />
+            )}
           </Button>
         </div>
         <a

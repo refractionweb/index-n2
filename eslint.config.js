@@ -20,4 +20,19 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Clipboard access goes through @/lib/clipboard so every call site
+    // reports the real outcome of the write.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/lib/clipboard.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[property.name='clipboard']",
+          message: 'Use copyText / useCopyFeedback from @/lib/clipboard.',
+        },
+      ],
+    },
+  },
 ])

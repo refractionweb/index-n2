@@ -1,30 +1,26 @@
-import { useState } from "react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useCopyFeedback } from "@/lib/clipboard";
 
 // Inline clickable code snippet that copies to clipboard on click and briefly
-// flips its text to "copied". Visual style mirrors the search-match highlight
+// flips its text to "copied" (or "copy failed"). Visual style mirrors the search-match highlight
 // in `lib/highlight.tsx` so the empty state's CLI hint reads as a copyable
 // affordance, not decorated text.
 export function CopyableCode({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
+  const { state, copy } = useCopyFeedback(1500);
+  const label =
+    state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : null;
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
-          onClick={handleCopy}
-          aria-label={copied ? "Copied" : `Copy ${value}`}
+          onClick={() => void copy(value)}
+          aria-label={label ?? `Copy ${value}`}
           className="bg-foreground/5 hover:bg-foreground/10 inline-grid grid-cols-1 rounded-sm px-1 font-mono"
         >
           {/* Width-stable swap: the invisible span reserves `value`'s
@@ -36,11 +32,11 @@ export function CopyableCode({ value }: { value: string }) {
             {value}
           </span>
           <span className="col-start-1 row-start-1">
-            {copied ? "copied" : value}
+            {label?.toLowerCase() ?? value}
           </span>
         </button>
       </TooltipTrigger>
-      <TooltipContent>{copied ? "Copied" : "Click to copy"}</TooltipContent>
+      <TooltipContent>{label ?? "Click to copy"}</TooltipContent>
     </Tooltip>
   );
 }

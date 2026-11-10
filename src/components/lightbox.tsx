@@ -44,6 +44,7 @@ import { AuthorLink } from "@/components/author-link";
 import { MediaPlaceholder } from "@/components/media-placeholder";
 import { QuotedTweetCard } from "@/components/quoted-tweet-card";
 import { ReplyOrThreadPills } from "@/components/reply-pills";
+import { useCopyFeedback } from "@/lib/clipboard";
 import { hexToRgb, rgbToHsv } from "@/lib/color-space";
 import { labToHex, labToRgb } from "@/lib/color-math";
 import {
@@ -472,14 +473,9 @@ function PaletteSwatch({
   bg: string;
   side: "top" | "right";
 }) {
-  const [copied, setCopied] = useState(false);
+  const { state: copyState, copy } = useCopyFeedback(1000);
   const { dispatch, clearAll } = useFilter();
   const { close } = useLightbox();
-
-  const copy = () => {
-    void navigator.clipboard.writeText(hex);
-    setCopied(true);
-  };
 
   const filterByThisColor = () => {
     const rgb = hexToRgb(hex);
@@ -489,12 +485,6 @@ function PaletteSwatch({
     dispatch({ type: "setColor", color: { hex: hex.toLowerCase(), h, s, v } });
     close();
   };
-
-  useEffect(() => {
-    if (!copied) return;
-    const t = window.setTimeout(() => setCopied(false), 1000);
-    return () => window.clearTimeout(t);
-  }, [copied]);
 
   return (
     <HoverCard openDelay={100} closeDelay={150}>
@@ -511,11 +501,15 @@ function PaletteSwatch({
           <Button
             variant="outline"
             size="sm"
-            onClick={copy}
+            onClick={() => void copy(hex)}
             className="font-mono uppercase"
           >
             <RiFileCopyLine />
-            {copied ? "Copied" : `${hex} ${pct}%`}
+            {copyState === "copied"
+              ? "Copied"
+              : copyState === "failed"
+                ? "Copy failed"
+                : `${hex} ${pct}%`}
           </Button>
           <Button
             variant="outline"
@@ -782,35 +776,16 @@ function DetailsGrid({
   const showQuotes = quoteCount > 0;
   const showLanguage = isDisplayableLanguage(language);
 
-  // Click the Tweet ID → copy to clipboard, flip the value to "COPIED" for
-  // 2s. The timeout handle lives in a ref so rapid clicks clear the prior
-  // timer (otherwise the first click's t+2s callback prematurely wipes
-  // COPIED scheduled by the second click). The [id] effect's cleanup also
-  // cancels the pending timer so a stale timeout from the previous bookmark
-  // can't fire setIdCopied(false) after navigation has already reset it.
-  const [idCopied, setIdCopied] = useState(false);
-  const copyTimerRef = useRef<number | null>(null);
+  // Click the Tweet ID → copy to clipboard, flip the value to "COPIED" (or
+  // "COPY FAILED") for 2s. Navigating to another bookmark resets it so the
+  // feedback never shows against a different id.
+  const { state: idCopy, copy: copyId, reset: resetIdCopy } =
+    useCopyFeedback(2000);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets COPIED feedback when bookmark navigation changes id
-    setIdCopied(false);
-    return () => {
-      if (copyTimerRef.current !== null) {
-        window.clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = null;
-      }
-    };
-  }, [id]);
-  const copyId = () => {
-    void navigator.clipboard.writeText(id);
-    setIdCopied(true);
-    if (copyTimerRef.current !== null) {
-      window.clearTimeout(copyTimerRef.current);
-    }
-    copyTimerRef.current = window.setTimeout(() => {
-      setIdCopied(false);
-      copyTimerRef.current = null;
-    }, 2000);
-  };
+    resetIdCopy();
+  }, [id, resetIdCopy]);
+  const idCopied = idCopy !== "idle";
+  const idCopyLabel = idCopy === "failed" ? "Copy failed" : "Copied";
 
   return (
     // Negative horizontal margins extend the top border beyond the parent
@@ -834,9 +809,9 @@ function DetailsGrid({
           <dd className="min-w-0 flex-1 text-right">
             <button
               type="button"
-              onClick={copyId}
-              aria-label={idCopied ? "Copied" : `Copy tweet ID ${id}`}
-              title={idCopied ? "Copied" : "Click to copy"}
+              onClick={() => void copyId(id)}
+              aria-label={idCopied ? idCopyLabel : `Copy tweet ID ${id}`}
+              title={idCopied ? idCopyLabel : "Click to copy"}
               className={cn(
                 // Same width-stable swap pattern as CopyableCode: button is
                 // an inline-grid with two layered cells, the invisible span
@@ -861,7 +836,7 @@ function DetailsGrid({
                   idCopied ? "text-center" : "text-right",
                 )}
               >
-                {idCopied ? "COPIED" : id}
+                {idCopied ? idCopyLabel.toUpperCase() : id}
               </span>
             </button>
           </dd>

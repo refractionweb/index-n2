@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useCollections } from "@/contexts/collections-context";
 import { useHidden } from "@/contexts/hidden-context";
+import { copyText } from "@/lib/clipboard";
 import type { Bookmark } from "@/types/bookmark";
 
 // Shared body of the per-bookmark "⋯" menu. BookmarkCard and the Lightbox
@@ -28,11 +29,11 @@ export function BookmarkMenuItems({ bookmark }: { bookmark: Bookmark }) {
 
   return (
     <>
-      <DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(url)}>
+      <DropdownMenuItem onSelect={() => void copyText(url)}>
         <RiFileCopyLine />
         Copy link
       </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(id)}>
+      <DropdownMenuItem onSelect={() => void copyText(id)}>
         <RiHashtag />
         Copy ID
       </DropdownMenuItem>

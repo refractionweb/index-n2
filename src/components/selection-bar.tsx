@@ -28,6 +28,7 @@ import { useHidden } from "@/contexts/hidden-context";
 import { useSelection } from "@/contexts/selection-context";
 import { useTab } from "@/contexts/tab-context";
 import { useFilteredBookmarks } from "@/hooks/use-filtered-bookmarks";
+import { copyText } from "@/lib/clipboard";
 import {
   downloadText,
   exportIds,
@@ -96,16 +97,10 @@ export function SelectionBar() {
 
   const title = activeCollection?.name ?? "Selection";
   const n = exportList.length;
-  // Report what the clipboard write actually did. It can reject (document
-  // not focused, permission denied), and `navigator.clipboard` is absent
-  // outside secure contexts, so the access sits inside the try.
+  // Not useCopyFeedback: the status line carries the count, and it shares
+  // the bar's own status timer above.
   const copy = async (text: string, what: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setStatus(`Copied ${n} ${what}`);
-    } catch {
-      setStatus("Copy failed");
-    }
+    setStatus((await copyText(text)) ? `Copied ${n} ${what}` : "Copy failed");
   };
   const markdown = () =>
     exportMarkdown(exportList, { title, mediaDir: info?.mediaDir ?? null });
