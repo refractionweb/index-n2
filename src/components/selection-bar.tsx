@@ -104,7 +104,7 @@ export function SelectionBar() {
     exportMarkdown(exportList, { title, mediaDir: info?.mediaDir ?? null });
 
   return (
-    <div className="pointer-events-none sticky bottom-4 z-50 mx-auto flex w-full max-w-[680px] px-3">
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-50 mx-auto flex w-full max-w-[680px] px-3">
       <div className="bg-card text-card-foreground pointer-events-auto flex h-[52px] w-full items-center gap-3.5 rounded-lg border py-3 pr-3 pl-3.5 shadow-lg">
         <SelectionStack ids={orderedIds} byId={byId} />
         <span className="flex-1 text-sm tabular-nums whitespace-nowrap">

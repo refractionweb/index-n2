@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RiLayoutLeft2Line, RiSideBarLine } from "@remixicon/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { BookmarkGrid } from "@/components/bookmark-grid";
@@ -26,6 +26,7 @@ import { SettingsProvider } from "@/contexts/settings-context";
 import { TabProvider, useTab } from "@/contexts/tab-context";
 import { useFilteredBookmarks } from "@/hooks/use-filtered-bookmarks";
 import { isGridTab } from "@/lib/tabs";
+import { cn } from "@/lib/utils";
 
 // Provider stack split into core vs app:
 // - CoreProviders are infrastructure that works regardless of ft (theme,
@@ -192,29 +193,58 @@ function ScrollContent() {
     }
   }, [filterState]);
 
+  const hasSelection = selectedIds.size > 0;
+
+  // Width of the scroll container's vertical scrollbar gutter (0 for
+  // overlay scrollbars, ~15px for classic ones). The overlays below are
+  // siblings of the scroll container, so without this they would span the
+  // gutter too and blur the bottom of the scrollbar.
+  const [gutter, setGutter] = useState(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setGutter(el.offsetWidth - el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isGrid]);
+
   return (
-    <div ref={scrollRef} className={`min-h-0 flex-1 overflow-auto px-3 pb-3 ${isGrid ? "pt-0.5" : "pt-14"}`}>
+    // The selection bar and its blur are overlays anchored to the scroll
+    // viewport, not in-flow sticky elements. Sticky falls back to its flow
+    // position at the end of the scroll, and that position is the grid's
+    // *predicted* height — real cards that run taller spill past it and the
+    // bar lands on top of them. As overlays they are pinned regardless of
+    // content height; the scroll container gains bottom padding while a
+    // selection exists so the last row can still scroll clear of the bar.
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={scrollRef}
+        className={cn(
+          "min-h-0 flex-1 overflow-auto px-3",
+          isGrid ? "pt-0.5" : "pt-14",
+          isGrid && hasSelection ? "pb-20" : "pb-3",
+        )}
+      >
+        {isGrid && (activeTab === "gallery" ? <GalleryGrid /> : <BookmarkGrid />)}
+        {activeTab === "duplicates" && <DuplicatesView />}
+        {activeTab === "settings" && <SettingsView />}
+      </div>
       {isGrid && (
-        <>
-          {activeTab === "gallery" ? (
-            <GalleryGrid />
-          ) : (
-            <BookmarkGrid />
-          )}
-          <div className="h-4" />
+        // Overlay frame: covers the scroll container's content box only,
+        // stopping short of the scrollbar gutter.
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0"
+          style={{ right: gutter }}
+        >
           <ProgressiveBlur
-            visible={selectedIds.size > 0}
-            // Negate the scroll container's `p-3` on the sides AND bottom so the
-            // blur spans all the way to the inset's edges (horizontal) and the
-            // viewport's bottom (via `-bottom-3` on the sticky anchor), not just
-            // the padded content rectangle.
-            className="-mx-3 -bottom-3"
+            visible={hasSelection}
+            className="absolute inset-x-0 bottom-0 mb-0"
           />
           <SelectionBar />
-        </>
+        </div>
       )}
-      {activeTab === "duplicates" && <DuplicatesView />}
-      {activeTab === "settings" && <SettingsView />}
     </div>
   );
 }
