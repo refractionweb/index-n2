@@ -51,7 +51,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b --noEmit",
     "preview": "vite preview",
     "prepublishOnly": "npm run build"
   },

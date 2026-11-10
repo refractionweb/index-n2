@@ -476,8 +476,7 @@ function LightboxPalette({
 // TODO(a11y): HoverCard opens only on hover — keyboard-only and touch users
 // can't reach the Copy / Filter buttons from the palette surface. Copy hex
 // here is keyboard-inaccessible; Filter-by-color has a parallel entry via the
-// topbar color picker. Revisit at Step 18 — add Enter/Space-on-focused-swatch
-// = copy.
+// topbar color picker. Fix: Enter/Space on a focused swatch copies its hex.
 function PaletteSwatch({
   hex,
   pct,

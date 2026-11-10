@@ -638,8 +638,8 @@ function loadBookmarks() {
   // Per-line try/catch so one corrupted line doesn't blank the entire grid.
   // Truncated writes, encoding glitches, mid-append crashes, manual edits —
   // any of them throw from JSON.parse. Without this guard, a single bad line
-  // collapses /api/bookmarks to a 500. Mirrors computeUnfetchedTotal's pattern
-  // (server.js:500-509). Skipped lines tally is logged once per load so
+  // collapses /api/bookmarks to a 500. Mirrors computeUnfetchedTotal's
+  // per-line guard. Skipped lines tally is logged once per load so
   // corruption is visible without spamming on every iteration. The first
   // bad line's error + a 200-char snippet are captured so a "skipped 47
   // lines" report is debuggable from the server log alone.
@@ -1278,8 +1278,8 @@ const server = createServer((req, res) => {
     if (!requireSameOrigin(req, res)) return;
     const url2 = new URL(req.url, `http://localhost:${PORT}`);
     const mode = url2.searchParams.get("mode") || "all";
-    // Whitelist mode upfront — the downstream pipeline branches on `===`
-    // comparisons (lines ~762, 779) so an unknown value silently does nothing
+    // Whitelist mode upfront — the pipeline below branches on `mode ===`
+    // comparisons, so an unknown value silently does nothing
     // (sync starts, no phase runs, only rebuildCaches fires). Reject early so
     // the caller learns the input was wrong instead of getting a misleading
     // "ok" + a no-op sync.
@@ -1657,7 +1657,7 @@ const server = createServer((req, res) => {
       syncError = STATUS.pipelineError;
     }).finally(() => {
       // Ownership: runRebuild owns syncRunning while it's in flight (its own
-      // .finally at line ~617 clears it on completion). Only reset here when
+      // .finally clears it on completion). Only reset here when
       // the IIFE exited before handing off — otherwise we'd race with
       // runRebuild's cleanup and risk clearing while the rebuild is still
       // building. activeRebuild === null means runRebuild already finished
