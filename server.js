@@ -386,7 +386,7 @@ function setSecurityHeaders(res) {
 //     we depend on don't exist)
 //   - newer than `max` → "untested", sync controls enabled with a warning
 //     badge (probably works, but we haven't verified)
-const FT_TESTED = Object.freeze({ min: "1.3.19", max: "1.3.19" });
+const FT_TESTED = Object.freeze({ min: "1.3.19", max: "1.3.22" });
 
 // First ft release whose SIGINT handlers save progress before exiting: the
 // sync cursor and the media manifest (fieldtheory-cli#142). 1.3.20 and 1.3.21
