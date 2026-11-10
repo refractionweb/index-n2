@@ -61,6 +61,40 @@ export function shortenUrlForDisplay(url: string): string {
   return display.length > 30 ? display.slice(0, 30) + "…" : display;
 }
 
+// A URL in post text: everything after the scheme up to whitespace, CJK /
+// kana / Hangul / fullwidth forms, or `<` `>` `"`. Posts in those scripts
+// often run prose straight on after a link with no space, and a URL with raw
+// CJK in it is rarer than that. No flags: build a /g copy where one is needed.
+// Shared by the renderer (linkify.tsx) and the height predictor, which must
+// agree on where every link ends.
+export const URL_PATTERN =
+  /https?:\/\/[^\s<>"\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uff00-\uffef]+/;
+
+// Split trailing punctuation off a URL match: "example.com/a)." is the link
+// "example.com/a" followed by the text ")." A closing bracket stays when the
+// URL opened one ("wiki/Foo_(bar)").
+const URL_TRAILING_PUNCTUATION = ".,;:!?'…";
+export function splitUrlTail(match: string): [url: string, tail: string] {
+  let end = match.length;
+  while (end > 0) {
+    const ch = match[end - 1];
+    if (URL_TRAILING_PUNCTUATION.includes(ch)) {
+      end--;
+      continue;
+    }
+    if (ch === ")" || ch === "]") {
+      const head = match.slice(0, end);
+      const open = ch === ")" ? "(" : "[";
+      if (head.split(ch).length > head.split(open).length) {
+        end--;
+        continue;
+      }
+    }
+    break;
+  }
+  return [match.slice(0, end), match.slice(end)];
+}
+
 // Replace each t.co/xxx in text with the corresponding expanded URL from `links`,
 // in document order. Any t.co without a matching entry is stripped — media-only
 // tweets ship as {text: "... https://t.co/xxx", links: []} where the trailing

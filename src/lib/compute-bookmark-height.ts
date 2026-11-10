@@ -25,7 +25,12 @@ import {
   ARTICLE_PENDING_CODE,
   ARTICLE_PENDING_SUFFIX,
 } from "@/components/article-block";
-import { expandTcoLinks, shortenUrlForDisplay } from "./format";
+import {
+  expandTcoLinks,
+  shortenUrlForDisplay,
+  splitUrlTail,
+  URL_PATTERN,
+} from "./format";
 import { extractReplyHandles } from "./reply-handles";
 
 const TEXT_LIMIT = 280;
@@ -247,8 +252,12 @@ function tokenize(
 // definition of the rule, not two mirrored copies. Without this, the
 // predictor measures expanded URL strings 3–4× wider than rendered, producing
 // visible gaps below cards with long URLs.
+const URL_GLOBAL = new RegExp(URL_PATTERN.source, "g");
 function shortenUrlsForDisplay(text: string): string {
-  return text.replace(/https?:\/\/\S+/g, shortenUrlForDisplay);
+  return text.replace(URL_GLOBAL, (match) => {
+    const [url, tail] = splitUrlTail(match);
+    return shortenUrlForDisplay(url) + tail;
+  });
 }
 
 function getBodyData(bookmark: Bookmark): BodyTextData {
