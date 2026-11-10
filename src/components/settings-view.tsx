@@ -158,7 +158,7 @@ export function SettingsView() {
           <ToggleRow
             id="hideUnfetched"
             label="Hide posts with unfetched media"
-            description="When on, the home, archive, and gallery hide bookmarks whose post or quoted-tweet media hasn't been downloaded yet. Useful after a large sync when you haven't run ft fetch-media. Author avatars are exempt — Skip profile images already covers that case."
+            description="Home, Archive and Gallery hide bookmarks whose post or quoted-tweet media is not downloaded. Author avatars are not counted; Skip profile images covers them."
             checked={settings.hideUnfetched}
             onChange={(v) => update({ hideUnfetched: v })}
           />

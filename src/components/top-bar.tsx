@@ -135,7 +135,9 @@ export function TopBar() {
   // rather than sitting permanently outside `overflow-auto`.
   const isGrid = isGridTab(activeTab);
   const resultCount = isGallery ? gallery.length : filtered.length;
-  const resultLabel = isGallery ? "media" : "results";
+  const resultLabel = isGallery
+    ? resultCount === 1 ? "item" : "items"
+    : resultCount === 1 ? "result" : "results";
 
   const sortOption = SORT_OPTIONS.find((o) => o.value === state.sort);
   const sortLabel = sortOption?.label ?? "Sort";
@@ -927,7 +929,7 @@ function CategoriesPopoverContent() {
       <CommandList>
         {empty && (
           <CommandEmpty className="text-muted-foreground">
-            {sortedCategories.length === 0 ? "No categories yet" : "No matches"}
+            {sortedCategories.length === 0 ? "No categories" : "No matches"}
           </CommandEmpty>
         )}
         <CommandGroup>

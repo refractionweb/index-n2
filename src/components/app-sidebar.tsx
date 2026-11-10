@@ -496,7 +496,7 @@ export function AppSidebar() {
                     {ftDisabled
                       ? ftDisabledTooltip("Fetch Media")
                       : noBookmarks
-                        ? "No bookmarks yet — sync first"
+                        ? "No bookmarks. Sync first."
                         : fetchMediaCmd}
                   </TooltipContent>
                 </Tooltip>
@@ -514,7 +514,7 @@ export function AppSidebar() {
                     {ftDisabled
                       ? ftDisabledTooltip("Backfill Gaps")
                       : noBookmarks
-                        ? "No bookmarks yet — sync first"
+                        ? "No bookmarks. Sync first."
                         : gapsCmd}
                   </TooltipContent>
                 </Tooltip>
@@ -532,7 +532,7 @@ export function AppSidebar() {
                     {ftDisabled
                       ? ftDisabledTooltip("Rebuild")
                       : noBookmarks
-                        ? "No bookmarks yet — sync first"
+                        ? "No bookmarks. Sync first."
                         : "ft sync --rebuild --yes"}
                   </TooltipContent>
                 </Tooltip>
