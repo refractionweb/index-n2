@@ -449,7 +449,7 @@ function TextSnippet({ cards }: { cards: GroupCard[] }) {
 
 function stripTwitterUrls(text: string): string {
   return text
-    .replace(/https?:\/\/t\.co\/\S+/g, "")
+    .replace(/https?:\/\/t\.co\/[A-Za-z0-9]+/g, "")
     .replace(/(?:https?:\/\/)?(?:www\.)?(?:x|twitter)\.com\/\S+/g, "")
     .replace(/\s+/g, " ")
     .trim();

@@ -447,7 +447,7 @@ function detectFtVersion() {
 function stripTrailingQuoteSelfLink(text, hasQuotedTweet) {
   if (!hasQuotedTweet || !text) return text;
   return text
-    .replace(/\s*(?:https?:\/\/t\.co\/\S+|(?:https?:\/\/)?(?:www\.)?(?:x|twitter)\.com\/\S+)\s*$/, "")
+    .replace(/\s*(?:https?:\/\/t\.co\/[A-Za-z0-9]+|(?:https?:\/\/)?(?:www\.)?(?:x|twitter)\.com\/\S+)\s*$/, "")
     .trim();
 }
 
@@ -618,7 +618,7 @@ function loadBookmarks() {
           const pfpKey = q.authorProfileImageUrl?.replace("_normal.", "_400x400.");
           const pfpFile = pfpKey ? mediaMap.get(pfpKey) : null;
           // Strip trailing t.co self-link (no `links` map available for quotes)
-          const text = decodeTweetEntities(q.text || "").replace(/\s*https:\/\/t\.co\/\S+$/, "").trim();
+          const text = decodeTweetEntities(q.text || "").replace(/\s*https?:\/\/t\.co\/[A-Za-z0-9]+\s*$/, "").trim();
           return {
             // Tweet id surfaced so the GUI can check `byId.get(quote.id)` — when
             // the quoted tweet is itself a bookmark, click opens its lightbox

@@ -89,7 +89,7 @@ function normalizeText(text) {
   if (!text) return "";
   return text
     .toLowerCase()
-    .replace(/https?:\/\/t\.co\/\S+/g, "")
+    .replace(/https?:\/\/t\.co\/[A-Za-z0-9]+/g, "")
     .replace(/@\w+/g, "")
     .replace(/\s+/g, " ")
     .trim();

@@ -65,11 +65,16 @@ export function shortenUrlForDisplay(url: string): string {
 // in document order. Any t.co without a matching entry is stripped — media-only
 // tweets ship as {text: "... https://t.co/xxx", links: []} where the trailing
 // t.co is a self-link to the tweet's own media.
+//
+// t.co ids are alphanumeric, so the match stops at the id: text glued to a
+// link ("(https://t.co/x).", CJK with no space after the link) survives.
 export function expandTcoLinks(text: string, links: string[]): string {
   if (!text) return text;
   let idx = 0;
   const n = links?.length ?? 0;
   return text
-    .replace(/https?:\/\/t\.co\/\S+/g, () => (idx < n ? links[idx++] : ""))
+    .replace(/https?:\/\/t\.co\/[A-Za-z0-9]+/g, () =>
+      idx < n ? links[idx++] : ""
+    )
     .trim();
 }
