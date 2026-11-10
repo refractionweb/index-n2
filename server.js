@@ -930,7 +930,7 @@ const STATUS = {
     signal ? `${label}: terminated (${signal})` : `${label}: exited with code ${code}`,
   idleKilled:  (label, minutes) => `${label}: no output for ${minutes} min, stopped`,
   pipelineError: "Sync failed. See server log.",
-  newBookmarks:    (n)              => `${n} new bookmarks`,
+  newBookmarks:    (n)              => `${n} new bookmark${n === 1 ? "" : "s"}`,
   // `ft sync --folders` phase: "Syncing bookmark folders...", then
   // "→ <name>..." as each folder walk starts. Nothing prints during a walk.
   syncingFolders:   "Syncing X folders...",
