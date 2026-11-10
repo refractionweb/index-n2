@@ -451,6 +451,16 @@ function stripTrailingQuoteSelfLink(text, hasQuotedTweet) {
     .trim();
 }
 
+// X's legacy tweet text is HTML-escaped (`&amp;`, `&lt;`, `&gt;`) and ft
+// stores it as received. Decode once here so cards, search, exports and
+// text dedup all see "AT&T", not "AT&amp;T". One pass over the string, so
+// an escaped entity ("&amp;lt;") decodes to its literal text ("&lt;").
+const TWEET_ENTITIES = { amp: "&", lt: "<", gt: ">" };
+function decodeTweetEntities(text) {
+  if (!text || !text.includes("&")) return text;
+  return text.replace(/&(amp|lt|gt);/g, (_, name) => TWEET_ENTITIES[name]);
+}
+
 // --- Build bookmarks JSON with local media paths ---
 function loadBookmarks() {
   const jsonlPath = join(FT, "bookmarks.jsonl");
@@ -584,7 +594,7 @@ function loadBookmarks() {
         _order: bookmarks.length,
         id: b.id,
         url: b.url,
-        text: stripTrailingQuoteSelfLink(b.text, !!b.quotedTweet),
+        text: stripTrailingQuoteSelfLink(decodeTweetEntities(b.text), !!b.quotedTweet),
         authorHandle: b.authorHandle,
         authorName: b.authorName,
         pfp: pfpFile ? `/media/${pfpFile}` : null,
@@ -608,7 +618,7 @@ function loadBookmarks() {
           const pfpKey = q.authorProfileImageUrl?.replace("_normal.", "_400x400.");
           const pfpFile = pfpKey ? mediaMap.get(pfpKey) : null;
           // Strip trailing t.co self-link (no `links` map available for quotes)
-          const text = (q.text || "").replace(/\s*https:\/\/t\.co\/\S+$/, "").trim();
+          const text = decodeTweetEntities(q.text || "").replace(/\s*https:\/\/t\.co\/\S+$/, "").trim();
           return {
             // Tweet id surfaced so the GUI can check `byId.get(quote.id)` — when
             // the quoted tweet is itself a bookmark, click opens its lightbox
