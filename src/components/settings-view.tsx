@@ -149,7 +149,7 @@ export function SettingsView() {
           <ToggleRow
             id="skipProfileImages"
             label="Skip profile images"
-            description="Don't download author avatars. Adds --skip-profile-images to Sync, Fetch Media and Backfill Gaps. Saves disk and bandwidth if you don't care about author thumbnails."
+            description="Don't download author avatars. Adds --skip-profile-images to Sync, Fetch Media and Backfill Gaps. Saves disk and bandwidth."
             checked={settings.skipProfileImages}
             onChange={(v) => update({ skipProfileImages: v })}
             disabled={ftDisabled}

@@ -212,10 +212,13 @@ export function AppSidebar() {
 
   // Render the actual command lines the buttons will spawn — useful for power
   // users debugging what the GUI is doing, and stays accurate when the user
-  // changes mediaFetchLimit / skipProfileImages / skipMedia.
-  const syncCmd = `${resumePending ? "ft sync --continue --no-media --max-minutes 10; " : ""}ft sync${
-    settings.skipMedia ? " --no-media" : ""
-  }${settings.skipProfileImages ? " --skip-profile-images" : ""}${settings.syncFolders ? " --folders" : ""}`;
+  // changes mediaFetchLimit / skipProfileImages / skipMedia / syncFolders.
+  // Sync and Rebuild share the flags server.js appends to `ft sync`.
+  const syncFlags = `${settings.skipMedia ? " --no-media" : ""}${
+    settings.skipProfileImages ? " --skip-profile-images" : ""
+  }${settings.syncFolders ? " --folders" : ""}`;
+  const syncCmd = `${resumePending ? "ft sync --continue --no-media --max-minutes 10; " : ""}ft sync${syncFlags}`;
+  const rebuildCmd = `ft sync --rebuild --yes${syncFlags}`;
   const gapsCmd = `ft sync --gaps${settings.skipMedia ? " --no-media" : ""}${
     settings.skipProfileImages ? " --skip-profile-images" : ""
   }`;
@@ -533,7 +536,7 @@ export function AppSidebar() {
                       ? ftDisabledTooltip("Rebuild")
                       : noBookmarks
                         ? "No bookmarks. Sync first."
-                        : "ft sync --rebuild --yes"}
+                        : rebuildCmd}
                   </TooltipContent>
                 </Tooltip>
               </DropdownMenuContent>
