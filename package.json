@@ -46,6 +46,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "vite",
+    "dev:fixture": "node scripts/dev-fixture.mjs",
+    "fixture": "node scripts/make-fixture.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
