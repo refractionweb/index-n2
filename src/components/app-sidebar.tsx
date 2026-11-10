@@ -210,7 +210,7 @@ export function AppSidebar() {
   // Render the actual command lines the buttons will spawn — useful for power
   // users debugging what the GUI is doing, and stays accurate when the user
   // changes mediaFetchLimit / skipProfileImages / skipMedia.
-  const syncCmd = `${resumePending ? "ft sync --continue --no-media; " : ""}ft sync${
+  const syncCmd = `${resumePending ? "ft sync --continue --no-media --max-minutes 10; " : ""}ft sync${
     settings.skipMedia ? " --no-media" : ""
   }${settings.skipProfileImages ? " --skip-profile-images" : ""}`;
   const gapsCmd = `ft sync --gaps${settings.skipMedia ? " --no-media" : ""}${

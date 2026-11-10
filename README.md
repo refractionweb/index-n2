@@ -48,7 +48,9 @@ ft's data directory is treated as read-only. The GUI never writes, deletes, or m
 | Fetch Media       | `ft fetch-media --limit N`      |
 | Rebuild Bookmarks | `ft sync --rebuild --yes`       |
 
-When the previous sync stopped early (cancelled, rate limited, or at ft's 30-minute cap), Sync first runs `ft sync --continue --no-media` to finish that walk from ft's saved position, then the regular `ft sync`. A plain `ft sync` alone would stop at the newest stored bookmark and discard the saved position.
+When the previous sync stopped early (cancelled, rate limited, or at ft's 30-minute cap) and the archive is under 9,500 bookmarks, Sync first runs `ft sync --continue --no-media --max-minutes 10` from ft's saved position, then the regular `ft sync`. A plain `ft sync` alone would stop at the newest stored bookmark and discard the saved position, leaving the bookmarks past the cut-off unfetched.
+
+From 9,500 bookmarks up, ft itself rescans the whole archive after every sync that catches up (its recovery for the old 10,000-bookmark page cap), for up to 30 minutes per sync. That rescan already covers a cut-off near the newest bookmarks, so index-n2 doesn't resume there. The sidebar shows the rescan as archive pages scanned.
 
 ### GUI-original
 

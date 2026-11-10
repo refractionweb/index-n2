@@ -981,7 +981,7 @@ async function rebuildCaches() {
   }
   cachedBookmarks = null;
   unfetchedCount = computeUnfetchedTotal();
-  resumePending = readSyncResumeCursor() !== null;
+  resumePending = shouldResumeSync();
 }
 
 // ft's saved sync position. ft writes `lastCursor` when `ft sync` stops
@@ -1000,9 +1000,50 @@ function readSyncResumeCursor() {
   }
 }
 
-// True when ft holds a resume cursor, so the next Sync starts with
-// `ft sync --continue`. Refreshed whenever caches rebuild (startup and the
-// end of every run).
+// Archive size as ft last recorded it (bookmarks-meta.json, written at the
+// end of every ft sync, interrupted or not), or null when unreadable.
+function readFtTotalBookmarks() {
+  try {
+    const meta = JSON.parse(readFileSync(join(FT, "bookmarks-meta.json"), "utf-8"));
+    return typeof meta?.totalBookmarks === "number" ? meta.totalBookmarks : null;
+  } catch {
+    return null;
+  }
+}
+
+// ft's OLD_CAP_THRESHOLD (graphql-bookmarks.ts, 1.3.19 and 1.3.22). At or
+// above it, every incremental `ft sync` that catches up keeps paging through
+// the entire archive ("auto-continue", meant to recover bookmarks the old
+// 10k page cap missed) with no stale-page limit, until the end of the list
+// or ft's 30-minute cap.
+const FT_AUTO_CONTINUE_THRESHOLD = 9_500;
+
+// Whether the next Sync should resume with `ft sync --continue` first.
+//
+// Only below ft's auto-continue threshold. Above it, the plain sync's own
+// rescan from the top walks back over the gap a cancel or rate limit left
+// near the newest bookmarks, so a resume only adds a second long walk. And
+// a resume there can repeat forever: on an archive just past the
+// threshold, ft's scan has been seen to run its full 30 minutes without
+// reaching the end of the list, then save a cursor at "max runtime
+// reached"; `--continue` from that cursor stops only on empty pages, the
+// end, or the cap, so it would save another one.
+function shouldResumeSync() {
+  if (readSyncResumeCursor() === null) return false;
+  const total = readFtTotalBookmarks();
+  return total === null || total < FT_AUTO_CONTINUE_THRESHOLD;
+}
+
+// Cap on the resume walk. The gap sits at the start of the walk (the pages
+// right after the cut-off); past it, `--continue` keeps walking stored
+// bookmarks to the end of the list, which adds nothing. Below the
+// auto-continue threshold the whole archive is under ~475 pages, which ft
+// covers in roughly 8 minutes at its default 600 ms page delay.
+const RESUME_MAX_MINUTES = 10;
+
+// True when the next Sync starts with `ft sync --continue` (see
+// shouldResumeSync). Refreshed whenever caches rebuild (startup and the end
+// of every run).
 let resumePending = false;
 
 let syncRunning = false;
@@ -1407,29 +1448,27 @@ const server = createServer((req, res) => {
           }
         };
       };
-      // A Sync after an interrupted one resumes first. ft saved a cursor
-      // (see readSyncResumeCursor); a plain `ft sync` would stop at the newest
-      // stored bookmark and clear it, so the pages past the cut-off would
-      // never be fetched. `--continue` walks from the cursor toward older
-      // bookmarks only, so the plain sync still runs afterwards for anything
-      // newer, and its media phase covers what the resumed walk added.
+      // A Sync after an interrupted one resumes first, when it helps (see
+      // shouldResumeSync). ft saved a cursor; a plain `ft sync` would stop at
+      // the newest stored bookmark and clear it, so the pages past the
+      // cut-off would never be fetched. `--continue` walks from the cursor
+      // toward older bookmarks only, capped at RESUME_MAX_MINUTES.
       // Rebuild is a full walk from the top and supersedes the cursor.
-      const resumed = mode === "all" && readSyncResumeCursor() !== null;
-      if (resumed && !cancelRequested) {
+      if (mode === "all" && !cancelRequested && shouldResumeSync()) {
         syncStep = STATUS.resumingSync;
         emitSync();
-        await run("ft", ["sync", "--continue", "--no-media"], { onOutput: makeSyncOutputParser() });
+        await run(
+          "ft",
+          ["sync", "--continue", "--no-media", "--max-minutes", String(RESUME_MAX_MINUTES)],
+          { onOutput: makeSyncOutputParser() },
+        );
       }
-      // If the resumed walk stopped early again (rate limit, max runtime,
-      // cancel), ft still holds a cursor. Skip the plain sync: its "caught
-      // up" stop would clear that cursor and leave the gap behind for good.
-      // The next Sync resumes again.
-      const stillResuming = resumed && readSyncResumeCursor() !== null;
-      if (
-        (mode === "all" || mode === "bookmarks-rebuild") &&
-        !cancelRequested &&
-        !stillResuming
-      ) {
+      // The plain sync always runs (unless cancelled), resumed or not: new
+      // bookmarks must sync every time. If the resume walk stopped early,
+      // the plain sync's "caught up" stop clears its cursor; the gap was in
+      // the walk's first pages, so what's dropped is a walk over bookmarks
+      // already stored. Its media phase also covers what the resume added.
+      if ((mode === "all" || mode === "bookmarks-rebuild") && !cancelRequested) {
         syncStep = STATUS.syncingBookmarks;
         emitSync();
         const s = getSettings();
