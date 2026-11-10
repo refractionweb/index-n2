@@ -43,7 +43,10 @@ export const GalleryCard = memo(function GalleryCard({
   const autoplay = settings.autoplayVideos;
 
   const src = media.thumb ?? media.url;
-  const isVideoType = media.type === "video" || media.type === "animated_gif";
+  // posterOnly: only the poster is on disk — render it like a photo.
+  const isVideoType =
+    (media.type === "video" || media.type === "animated_gif") &&
+    !media.posterOnly;
 
   // Cancel an in-flight photo fetch on unmount: clearing `src` aborts the
   // request. (The video-side equivalent lives in CardVideo.)

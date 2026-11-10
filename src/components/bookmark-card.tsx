@@ -311,7 +311,11 @@ function MediaThumb({
     );
   }
 
-  if (media.type === "video" || media.type === "animated_gif") {
+  // posterOnly: only the poster is on disk — falls through to the <img>.
+  if (
+    (media.type === "video" || media.type === "animated_gif") &&
+    !media.posterOnly
+  ) {
     // When autoplay is on: silent-loop preview with controls revealed on hover.
     // When off: paused at `poster` frame, controls always visible (touch devices
     // can't hover). Either way, the card's onClick guard excludes `video` (and

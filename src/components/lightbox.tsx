@@ -394,7 +394,11 @@ function LightboxMedia({
       />
     );
   }
-  if (media.type === "video" || media.type === "animated_gif") {
+  // posterOnly: only the poster is on disk — falls through to the <img>.
+  if (
+    (media.type === "video" || media.type === "animated_gif") &&
+    !media.posterOnly
+  ) {
     return (
       <video
         ref={videoRef}

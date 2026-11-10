@@ -28,6 +28,11 @@ export type MediaItem = {
   width: number | null;
   height: number | null;
   colors: ColorData | null;
+  // Video / GIF whose poster is on disk but no video file is (not
+  // downloaded, or the source lists no variants — always the case for
+  // quoted tweets). `url` is the poster image; render it as a still, never
+  // as a <video> source. Absent on everything else.
+  posterOnly?: boolean;
 };
 
 export type Engagement = {

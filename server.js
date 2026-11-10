@@ -451,6 +451,9 @@ function stripTrailingQuoteSelfLink(text, hasQuotedTweet) {
     .trim();
 }
 
+const VIDEO_EXTS = new Set([".mp4", ".webm", ".m4v", ".mov"]);
+const extOf = (filename) => "." + filename.split(".").pop().toLowerCase();
+
 // X's legacy tweet text is HTML-escaped (`&amp;`, `&lt;`, `&gt;`) and ft
 // stores it as received. Decode once here so cards, search, exports and
 // text dedup all see "AT&T", not "AT&amp;T". One pass over the string, so
@@ -532,6 +535,12 @@ function loadBookmarks() {
       }
       const local = mediaMap.get(m.url);
       if (local) {
+        // For video / animated_gif, `m.url` is the poster image, so reaching
+        // here means only the poster is on disk: no variant was downloaded
+        // (skipped as too large, failed), or the source lists none (ft keeps
+        // no videoVariants for quoted tweets). `posterOnly` tells the client
+        // to show it as a still instead of handing a .jpg to <video>.
+        const isVideoItem = m.type === "video" || m.type === "animated_gif";
         return {
           type: m.type,
           url: `/media/${local}`,
@@ -539,6 +548,7 @@ function loadBookmarks() {
           width: m.width,
           height: m.height,
           colors: colorCache[local] || null,
+          ...(isVideoItem && !VIDEO_EXTS.has(extOf(local)) ? { posterOnly: true } : {}),
         };
       }
       // Source data has the media item but no file is on disk (no variant
