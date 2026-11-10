@@ -1,7 +1,7 @@
 {
   "name": "index-n2",
   "version": "0.1.0",
-  "description": "Local viewer for fieldtheory-cli bookmarks. Reads from ~/.ft-bookmarks/.",
+  "description": "Local viewer for fieldtheory-cli bookmarks.",
   "keywords": [
     "fieldtheory-cli",
     "fieldtheory",

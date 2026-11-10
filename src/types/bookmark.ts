@@ -55,7 +55,7 @@ export type QuotedTweet = {
   pfp: string | null;
   // Media attached to the quoted tweet. Same shape as Bookmark.media —
   // ft fetch-media (1.3.13+) downloads quoted-tweet media into the same
-  // ~/.ft-bookmarks/media/ directory, and the manifest tracks it. Empty when
+  // media/ directory under ft's data dir, and the manifest tracks it. Empty when
   // the quoted tweet has no images/videos or when nothing has been fetched yet.
   media: MediaItem[];
 };

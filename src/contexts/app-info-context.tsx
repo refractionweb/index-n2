@@ -33,7 +33,7 @@ export type AppInfo = {
   author?: string | { name?: string; email?: string; url?: string };
   ft: FtInfo | null;
   hasData: boolean;
-  // ft's media directory, home-relative ("~/.ft-bookmarks/media"); used by
+  // ft's media directory, home-relative (e.g. "~/.fieldtheory/bookmarks/media"); used by
   // Markdown export to emit local file paths. Absent on older servers.
   mediaDir?: string;
 };

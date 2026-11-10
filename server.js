@@ -23,7 +23,19 @@ const CACHE_DIR = process.env.INDEX_N2_CACHE_DIR || join(homedir(), ".index-n2")
 setColorCacheDir(CACHE_DIR);
 setThumbsCacheDir(CACHE_DIR);
 setDedupCacheDir(CACHE_DIR);
-const FT = process.env.FT_DATA_DIR || join(homedir(), ".ft-bookmarks");
+// ft's data directory, resolved the way ft resolves it (dataDir() in
+// fieldtheory-cli's paths.ts): FT_DATA_DIR when set; otherwise the canonical
+// ~/.fieldtheory/bookmarks, unless only the legacy ~/.ft-bookmarks exists.
+// Fresh ft installs write to the canonical path; older installs keep the
+// legacy one. Resolved once at startup, so a directory ft creates later
+// (e.g. the canonical one appearing) takes effect on the next restart.
+function resolveFtDataDir() {
+  if (process.env.FT_DATA_DIR) return process.env.FT_DATA_DIR;
+  const canonical = join(homedir(), ".fieldtheory", "bookmarks");
+  const legacy = join(homedir(), ".ft-bookmarks");
+  return existsSync(canonical) || !existsSync(legacy) ? canonical : legacy;
+}
+const FT = resolveFtDataDir();
 
 // Home-relative form of a path ("~/.ft-bookmarks/media") for anything that
 // leaves the server as user-copyable text, so exports don't carry the
@@ -130,7 +142,7 @@ let dedupResult = { imageDupes: [], textDupes: [] };
 
 // --- Category enrichment (read-only SQLite) ---
 // ft classify stores `primary_category` + comma-separated `categories` in
-// ~/.ft-bookmarks/bookmarks.db. We open it read-only via sql.js-fts5 (the same
+// ft's bookmarks.db. We open it read-only via sql.js-fts5 (the same
 // WASM build the CLI uses, so its FTS5 virtual tables don't fail to open) and
 // cache the map keyed by bookmark id. Refreshed when the db mtime changes.
 const requireCjs = createRequire(import.meta.url);
@@ -515,7 +527,7 @@ function loadBookmarks() {
 
   // Build a MediaItem array from a source with mediaObjects. Used for the main
   // bookmark and its quotedTweet — both have identical shape, both go through
-  // ft fetch-media (1.3.13+), both land in the same ~/.ft-bookmarks/media/.
+  // ft fetch-media (1.3.13+), both land in the same <ft data dir>/media/.
   // For video items, ft's graphql parser sets `m.url` to the poster image URL
   // (pbs.twimg.com/amplify_video_thumb/...) and mp4 URLs live on
   // `m.videoVariants[].url`. Both get fetched by ft and tracked in mediaMap,
@@ -1805,6 +1817,9 @@ function listenWithFallback(port, attempts = 10) {
     const ftInfo = detectFtVersion();
     if (ftInfo) console.log(`  fieldtheory ${ftInfo.version} on PATH`);
     else console.log(`  WARNING: fieldtheory CLI not found on PATH — sync features will fail until \`npm i -g fieldtheory\``);
+    // The data directory is resolved, not fixed (see resolveFtDataDir), so
+    // say which one this run reads.
+    console.log(`  data ${tildify(FT)}`);
     if (shouldOpen) open(url).catch(() => {});
   };
   const onError = (err) => {

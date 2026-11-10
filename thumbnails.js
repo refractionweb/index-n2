@@ -1,6 +1,6 @@
 // Generate 1200px-wide thumbnails for post media (not pfps), only when the
 // source is actually bigger than 1200 px on its longest side. Files at or
-// below 1200 px are served directly from ~/.ft-bookmarks/media/ — no thumb
+// below 1200 px are served directly from ft's media/ directory — no thumb
 // file is created. Matches Twitter's `:medium` variant ceiling so today's
 // corpus produces zero thumbs; the pipeline activates when ft starts
 // fetching larger variants (fieldtheory-cli#153).

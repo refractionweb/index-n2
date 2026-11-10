@@ -2,7 +2,7 @@
 
 https://github.com/user-attachments/assets/f25b8ad1-d227-4c5d-9487-09ad5590febb
 
-A local viewer for [fieldtheory-cli](https://github.com/afar1/fieldtheory-cli). Runs a Node server on `localhost:5787` and opens a browser tab. Reads from `~/.ft-bookmarks/`; writes derived caches to `~/.index-n2/`.
+A local viewer for [fieldtheory-cli](https://github.com/afar1/fieldtheory-cli). Runs a Node server on `localhost:5787` and opens a browser tab. Reads from ft's data directory; writes derived caches to `~/.index-n2/`.
 
 Third-party tool, not affiliated with fieldtheory-cli.
 
@@ -26,9 +26,9 @@ The server binds `127.0.0.1:5787` and opens `http://localhost:5787/`. If 5787 is
 
 ## Overview
 
-Reads `~/.ft-bookmarks/bookmarks.jsonl` and `bookmarks.db` directly. Renders the result as a masonry grid, gallery, lightbox, and duplicates view. Filters across author, type, language, category, color, and full-text search. Wraps `ft sync`, `ft fetch-media`, and `ft sync --rebuild` as sidebar actions with live progress over Server-Sent Events.
+Reads ft's `bookmarks.jsonl` and `bookmarks.db` directly from its data directory (see [Layout](#layout)). Renders the result as a masonry grid, gallery, lightbox, and duplicates view. Filters across author, type, language, category, color, and full-text search. Wraps `ft sync`, `ft fetch-media`, and `ft sync --rebuild` as sidebar actions with live progress over Server-Sent Events.
 
-`~/.ft-bookmarks/` is treated as read-only. The GUI never writes, deletes, or modifies anything inside it. All derived data — thumbnails, color palette cache, dedup index, archive list, settings — lives in `~/.index-n2/` and is rebuildable from scratch.
+ft's data directory is treated as read-only. The GUI never writes, deletes, or modifies anything inside it. All derived data — thumbnails, color palette cache, dedup index, archive list, settings — lives in `~/.index-n2/` and is rebuildable from scratch.
 
 ### CLI features re-implemented client-side
 
@@ -81,7 +81,7 @@ Unknown keys are stripped on the next save; defaults backfill missing keys. Sche
 
 | Variable       | Default           | Effect                                                   |
 | -------------- | ----------------- | -------------------------------------------------------- |
-| `FT_DATA_DIR`  | `~/.ft-bookmarks` | Override the ft data directory                           |
+| `FT_DATA_DIR`  | ft's default      | Override the ft data directory. Unset, resolved as ft does: `~/.fieldtheory/bookmarks`, or `~/.ft-bookmarks` when only that exists. |
 | `PORT`         | 5787              | Pin the port. Disables the auto-fallback on collision.   |
 | `BROWSER=none` | unset             | Skip browser auto-open even if the setting is enabled    |
 | `CI`           | unset             | Skip browser auto-open                                   |
@@ -95,7 +95,8 @@ index-n2 --no-open      Skip browser auto-open for this run
 ## Layout
 
 ```
-~/.ft-bookmarks/                  fieldtheory-cli, read-only to this app
+~/.fieldtheory/bookmarks/         fieldtheory-cli, read-only to this app
+                                  (~/.ft-bookmarks/ on older installs)
   bookmarks.jsonl                 raw bookmark records
   bookmarks.db                    SQLite, opened read-only via sql.js-fts5
   media-manifest.json             URL → local-path map
@@ -113,7 +114,7 @@ index-n2 process          localhost:5787
   dist/                           Vite build (React 19, TS, Tailwind 4, shadcn/ui)
 ```
 
-Per-file caches (palette, pHash, thumbnails) are keyed by media filename and grow incrementally — only files in `~/.ft-bookmarks/media/` that aren't already in the cache trigger work. Bookmark records reload when `bookmarks.jsonl` or the SQLite mtime changes.
+Per-file caches (palette, pHash, thumbnails) are keyed by media filename and grow incrementally — only files in ft's `media/` directory that aren't already in the cache trigger work. Bookmark records reload when `bookmarks.jsonl` or the SQLite mtime changes.
 
 ## Security
 
@@ -127,7 +128,7 @@ The server is a localhost-only Node process. Defenses:
 - **Strict CSP.** No remote scripts; the only inline script is hash-allowlisted. Styles, images, fonts, and media follow standard SPA carve-outs.
 - **Subprocess discipline.** Spawned `ft` processes time out at 5 min idle (not wall-clock). Cancel sends SIGINT on Unix.
 
-No remote endpoints are contacted. All media is read from `~/.ft-bookmarks/media/`, which ft itself populates.
+No remote endpoints are contacted. All media is read from ft's `media/` directory, which ft itself populates.
 
 ## Limitations
 
