@@ -937,7 +937,10 @@ const STATUS = {
   syncingFolder:    (name) => `Syncing X folder ${name}...`,
   // ft reports these and still exits 0 (folders are "bonus" to the main
   // sync), so they're recorded as the run's failure line themselves.
-  folderSkipped:    (name, reason) => `X folder ${name} skipped: ${reason}`,
+  // ft's skip line is "<name>: <reason>", and either side can contain
+  // ": " (a folder named "Ratio: 16:9 refs"), so it's kept whole rather
+  // than split into name and reason.
+  folderSkipped:    (detail) => `X folder skipped: ${detail}`,
   folderSyncError:  (msg) => `X folder sync failed: ${msg}`,
   // ft's scan past the old 10k cap: on archives of 9,500+ bookmarks, an
   // incremental sync that caught up keeps paging through the whole archive
@@ -1464,9 +1467,9 @@ const server = createServer((req, res) => {
               setStep(STATUS.syncingFolder(folderStart[1]));
               continue;
             }
-            const folderSkip = line.match(/^⚠ Skipped (.+?): (.+)$/);
+            const folderSkip = line.match(/^⚠ Skipped (.+)$/);
             if (folderSkip) {
-              syncError ??= STATUS.folderSkipped(folderSkip[1], folderSkip[2]);
+              syncError ??= STATUS.folderSkipped(folderSkip[1]);
               emitSync();
               continue;
             }
