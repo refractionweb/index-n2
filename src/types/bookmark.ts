@@ -69,11 +69,16 @@ export type Bookmark = {
   authorName: string;
   pfp: string | null;
   postedAt: string;
+  // Effectively always null. X's bookmarks GraphQL endpoint doesn't expose
+  // when a bookmark was saved, and ft clears this field on every record it
+  // syncs that way (sanitizeBookmarkedAt in ft's graphql-bookmarks.ts). The
+  // saved order lives in the JSONL's line order instead (ft sorts by X's
+  // sortIndex where both records have one, else by post time, then tweet
+  // id; compareBookmarkChronology), which is what the saved-date sort uses.
   bookmarkedAt: string | null;
   // ISO timestamp from ft's last sync of this record. Used in the lightbox
-  // Details panel to surface staleness ("Synced 2 days ago"). Don't conflate
-  // with `bookmarkedAt`, which is when ft first saw the bookmark on sync, not
-  // when it was saved on X.
+  // Details panel to surface staleness ("Synced 2 days ago"). Not a save
+  // date either.
   syncedAt: string | null;
   language: string;
   links: string[];
