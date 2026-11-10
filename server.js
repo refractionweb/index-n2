@@ -10,7 +10,7 @@ import { createRequire } from "node:module";
 import { buildColorCache, loadColors, setCacheDir as setColorCacheDir } from "./colorize.js";
 import { buildThumbnails, setCacheDir as setThumbsCacheDir } from "./thumbnails.js";
 import { buildDedupCache, setCacheDir as setDedupCacheDir } from "./dedup.js";
-import { spawn as spawnCmd } from "node:child_process";
+import { spawn as spawnCmd, execFile as execFileCb } from "node:child_process";
 import { EventEmitter } from "node:events";
 import open from "open";
 
@@ -909,6 +909,8 @@ const STATUS = {
   starting:             "Starting...",
   resumingSync:         "Resuming interrupted sync...",
   syncingBookmarks:     "Syncing bookmarks...",
+  // macOS is showing ft's Keychain prompt (see keychainChildOf).
+  waitingKeychain:      "Waiting for Keychain access...",
   cancelling:           "Cancelling...",
   fetchingMedia:        "Fetching media...",
   fillingGaps:          "Filling gaps...",
@@ -931,6 +933,10 @@ const STATUS = {
   idleKilled:  (label, minutes) => `${label}: no output for ${minutes} min, stopped`,
   pipelineError: "Sync failed. See server log.",
   newBookmarks:    (n)              => `${n} new bookmark${n === 1 ? "" : "s"}`,
+  // Second line under page progress once no new page has arrived for
+  // STALL_MS. States only what's observed; ft prints nothing while it
+  // retries a request to X, so the cause isn't known here.
+  noNewPageSince:  (date) => `No new page since ${date.toTimeString().slice(0, 5)}`,
   // `ft sync --folders` phase: "Syncing bookmark folders...", then
   // "→ <name>..." as each folder walk starts. Nothing prints during a walk.
   syncingFolders:   "Syncing X folders...",
@@ -1325,9 +1331,30 @@ const server = createServer((req, res) => {
     // During ft's folder phase the limit is 30 min: a folder walk prints
     // nothing from its "→ <name>..." line until the next folder, and one
     // walk can run up to 1,000 pages plus 429 backoffs of 15-120 s.
+    //
+    // A macOS Keychain prompt pauses the clock. ft reads Chrome's cookie key
+    // with a synchronous `security find-generic-password` (chrome-cookies.ts)
+    // at the start of a sync and again before the folder phase, and it is
+    // blocked (no output, no spinner) until the prompt is answered. While
+    // that child of ft exists, the idle clock doesn't run, for up to
+    // KEYCHAIN_MAX_MIN, and the status says so.
     const IDLE_MIN = 5;
     const CANCEL_IDLE_MIN = 20;
     const FOLDER_IDLE_MIN = 30;
+    const KEYCHAIN_MAX_MIN = 30;
+    const KEYCHAIN_CMD = /(^|\/)security find-generic-password(\s|$)/;
+    // Whether `pid` has a `security find-generic-password` child right now.
+    // macOS only: elsewhere ft reads browser cookies without that prompt.
+    const keychainChildOf = (pid) => new Promise((resolve) => {
+      if (process.platform !== "darwin") return resolve(false);
+      execFileCb("ps", ["-A", "-o", "ppid=,command="], { maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+        if (err) return resolve(false);
+        resolve(stdout.split("\n").some((l) => {
+          const m = l.trim().match(/^(\d+)\s+(.*)$/);
+          return !!m && Number(m[1]) === pid && KEYCHAIN_CMD.test(m[2]);
+        }));
+      });
+    });
     // Set by the sync output parser while ft is in its folder phase; reset
     // for each spawned run.
     let ftFolderPhase = false;
@@ -1346,7 +1373,39 @@ const server = createServer((req, res) => {
       ftFolderPhase = false;
       const idleMinutes = () =>
         cancelRequested ? CANCEL_IDLE_MIN : ftFolderPhase ? FOLDER_IDLE_MIN : IDLE_MIN;
-      const idleTimer = setInterval(() => {
+      // Keychain wait state for this run: when it was first seen, and the
+      // step it replaced.
+      let keychainSince = null;
+      let stepBeforeKeychain = null;
+      let checkingKeychain = false;
+      const endKeychainWait = () => {
+        if (keychainSince === null) return;
+        keychainSince = null;
+        if (syncStep === STATUS.waitingKeychain) {
+          syncStep = stepBeforeKeychain;
+          emitSync();
+        }
+      };
+      const idleTimer = setInterval(async () => {
+        // Look for the Keychain child only once ft has gone quiet.
+        if (Date.now() - lastActivity >= 5000 && !checkingKeychain) {
+          checkingKeychain = true;
+          const waiting = await keychainChildOf(proc.pid);
+          checkingKeychain = false;
+          if (waiting) {
+            if (keychainSince === null) {
+              keychainSince = Date.now();
+              stepBeforeKeychain = syncStep;
+              if (!cancelRequested) {
+                syncStep = STATUS.waitingKeychain;
+                emitSync();
+              }
+            }
+            if (Date.now() - keychainSince < KEYCHAIN_MAX_MIN * 60 * 1000) lastActivity = Date.now();
+          } else {
+            endKeychainWait();
+          }
+        }
         if (Date.now() - lastActivity > idleMinutes() * 60 * 1000) {
           idleKilled = true;
           // kill() throws on some platforms if the proc is already exiting
@@ -1358,6 +1417,7 @@ const server = createServer((req, res) => {
       }, 5000);
       const handleData = (d) => {
         lastActivity = Date.now();
+        endKeychainWait();
         if (onOutput) onOutput(stripAnsi(d.toString()));
       };
       proc.stdout?.on("data", handleData);
@@ -1421,6 +1481,22 @@ const server = createServer((req, res) => {
         // page, so scanned = P - startPage.
         let lastPage = 0;
         let scan = null; // { startPage, total }
+        // Stall line for page-based phases (sync, resume, archive scan):
+        // once STALL_MS pass with no new page, a second line says since
+        // when. Cleared by the next page. Not used for media, where one
+        // large file can take minutes on its own.
+        const STALL_MS = 60 * 1000;
+        let progressKey = null;
+        let lastProgressAt = Date.now();
+        const noteProgress = (key) => {
+          if (key === progressKey) return;
+          progressKey = key;
+          lastProgressAt = Date.now();
+        };
+        const withStall = (step) =>
+          Date.now() - lastProgressAt < STALL_MS
+            ? step
+            : `${step}\n${STATUS.noNewPageSince(new Date(lastProgressAt))}`;
         // Push a step only when it changes: the spinner redraws every 80 ms,
         // and each redraw used to emit an identical SSE frame.
         const setStep = (next) => {
@@ -1451,8 +1527,9 @@ const server = createServer((req, res) => {
               const total = parseInt(scanMatch[2], 10);
               const n = parseInt(line.match(/(\d+)\s+new\s+│/)?.[1] ?? "0", 10);
               if (!scan) scan = { startPage: lastPage, total };
+              noteProgress(`scan:${done}`);
               if (Number.isFinite(done) && Number.isFinite(total) && total > 0) {
-                setStep(STATUS.scanProgress(done, total, n));
+                setStep(withStall(STATUS.scanProgress(done, total, n)));
               }
               continue;
             }
@@ -1487,8 +1564,9 @@ const server = createServer((req, res) => {
               const n = parseInt(frame[1], 10);
               const page = parseInt(frame[2], 10);
               if (Number.isFinite(page)) lastPage = page;
-              if (scan) setStep(STATUS.scanProgress(Math.max(0, page - scan.startPage), scan.total, n));
-              else if (Number.isFinite(n) && n >= 0 && n < 1_000_000) setStep(STATUS.newBookmarks(n));
+              noteProgress(`page:${page}`);
+              if (scan) setStep(withStall(STATUS.scanProgress(Math.max(0, page - scan.startPage), scan.total, n)));
+              else if (Number.isFinite(n) && n >= 0 && n < 1_000_000) setStep(withStall(STATUS.newBookmarks(n)));
               continue;
             }
             // ft's summary: "✓ N new bookmarks synced (T total)". Only this

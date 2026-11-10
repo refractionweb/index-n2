@@ -132,7 +132,7 @@ The server is a localhost-only Node process. Defenses:
 - **Path traversal + symlink escape guard.** Every static-file request — `/media/`, `/thumbs/`, and the SPA bundle in `dist/` — is resolved lexically, then `realpath`-validated to lie under its base directory.
 - **Media extension whitelist.** Image and video formats only — no SVG, no HTML.
 - **Strict CSP.** No remote scripts; the only inline script is hash-allowlisted. Styles, images, fonts, and media follow standard SPA carve-outs.
-- **Subprocess discipline.** Spawned `ft` processes time out after 5 min without output (not wall-clock), or 20 min once a cancel is requested, so ft can finish saving. Cancel sends one SIGINT on Unix and SIGTERM on Windows.
+- **Subprocess discipline.** Spawned `ft` processes time out after 5 min without output (not wall-clock): 30 min during ft's folder phase, 20 min once a cancel is requested so ft can finish saving. The clock pauses (up to 30 min) while macOS shows ft's Keychain prompt for Chrome's cookie key; the sidebar says "Waiting for Keychain access...". Cancel sends one SIGINT on Unix and SIGTERM on Windows.
 
 No remote endpoints are contacted. All media is read from ft's `media/` directory, which ft itself populates.
 
