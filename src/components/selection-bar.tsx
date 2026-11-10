@@ -23,10 +23,11 @@ import {
 import { SelectionStack } from "@/components/selection-stack";
 import { useAppInfo } from "@/contexts/app-info-context";
 import { useBookmarks } from "@/contexts/bookmarks-context";
-import { useActiveCollection, useCollections } from "@/contexts/collections-context";
+import { useCollections } from "@/contexts/collections-context";
 import { useHidden } from "@/contexts/hidden-context";
 import { useSelection } from "@/contexts/selection-context";
 import { useTab } from "@/contexts/tab-context";
+import { useActiveScopeName } from "@/hooks/use-active-members";
 import { useFilteredBookmarks } from "@/hooks/use-filtered-bookmarks";
 import { copyText } from "@/lib/clipboard";
 import {
@@ -44,7 +45,7 @@ export function SelectionBar() {
   const { archive, restore } = useHidden();
   const { activeTab } = useTab();
   const { collections, add, removeFrom, promptCreate } = useCollections();
-  const activeCollection = useActiveCollection();
+  const scopeName = useActiveScopeName();
   const { info } = useAppInfo();
   const filtered = useFilteredBookmarks();
   const restoring = activeTab === "archive";
@@ -95,7 +96,7 @@ export function SelectionBar() {
     return "indeterminate";
   };
 
-  const title = activeCollection?.name ?? "Selection";
+  const title = scopeName ?? "Selection";
   const n = exportList.length;
   // Not useCopyFeedback: the status line carries the count, and it shares
   // the bar's own status timer above.

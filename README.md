@@ -60,6 +60,7 @@ From 9,500 bookmarks up, ft itself rescans the whole archive after every sync th
 - **Sort by engagement** — likes, reposts, bookmarks, or random.
 - **Gallery view.** Image-only, flattened across bookmarks.
 - **Archive.** Hide bookmarks from the main grid without touching source data.
+- **X folders.** With *Sync X folders* on, Sync passes `--folders` and the sidebar lists each X bookmark folder ft mirrored as its own tab. Read-only: ft can't write folders back to X, so renames and membership changes made on X arrive with the next Sync. A folder only appears once it has members.
 
 ## Configuration
 
@@ -73,11 +74,12 @@ Persisted in `~/.index-n2/settings.json`. Edit through the gear icon in the side
 | `autoplayVideos`    | true    | Auto-start videos in the lightbox                   |
 | `autoOpenBrowser`   | true    | Open a browser tab on startup (restart to apply)    |
 | `skipMedia`         | false   | Sync and Backfill Gaps pass `--no-media` (no media phase) |
+| `syncFolders`       | false   | Sync passes `--folders` (X bookmark folders; one extra walk per folder) |
 | `mediaFetchLimit`   | 0       | Cap for `ft fetch-media --limit`. 0 disables it.    |
 | `skipProfileImages` | false   | Adds `--skip-profile-images` to Sync, Fetch Media, and Backfill Gaps |
 | `hideUnfetched`     | false   | Hide bookmarks with media pending download          |
 
-Two additional keys are flipped by "Don't show this again" checkboxes on confirmation dialogs, not the gear icon: `cancelMediaWarningSuppressed` (cancel fetch-media) and `noLimitWarningSuppressed` (no-batch-limit warning shown before unbounded Sync / Fetch Media). Reset to Defaults clears all nine.
+Two additional keys are flipped by "Don't show this again" checkboxes on confirmation dialogs, not the gear icon: `cancelMediaWarningSuppressed` (cancel fetch-media) and `noLimitWarningSuppressed` (no-batch-limit warning shown before unbounded Sync / Fetch Media). Reset to Defaults clears all ten.
 
 Unknown keys are stripped on the next save; defaults backfill missing keys. Schema migrations are self-healing.
 

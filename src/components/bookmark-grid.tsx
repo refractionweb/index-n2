@@ -7,6 +7,7 @@ import {
   useHiddenByCollections,
 } from "@/contexts/collections-context";
 import { useFilter } from "@/contexts/filter-context";
+import { useActiveFolder } from "@/contexts/folders-context";
 import { useHidden } from "@/contexts/hidden-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useTab } from "@/contexts/tab-context";
@@ -22,6 +23,7 @@ export function BookmarkGrid() {
   const { activeTab, setTab } = useTab();
   const filtered = useFilteredBookmarks();
   const activeCollection = useActiveCollection();
+  const activeFolder = useActiveFolder();
   const hiddenByCollections = useHiddenByCollections();
 
   if (loading) {
@@ -60,8 +62,8 @@ export function BookmarkGrid() {
       filterState.search !== "";
 
     if (hasFilters) {
-      // Collections have no "opposite scope" to point at.
-      if (activeCollection) {
+      // Collections and X folders have no "opposite scope" to point at.
+      if (activeCollection || activeFolder) {
         return (
           <StatusMessage>
             <p>No bookmarks match the current filters.</p>

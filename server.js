@@ -67,6 +67,11 @@ const DEFAULT_SETTINGS = Object.freeze({
   // Default false: ft sync's auto-media (Infinity since 1.3.18) handles it
   // inline, no extra click needed.
   skipMedia: false,
+  // When true, Sync passes --folders to ft sync: after the main walk, ft walks
+  // every X bookmark folder and tags its members (shown as the sidebar's
+  // X folders). Off by default, as in ft: each folder is an extra walk of up
+  // to 1,000 pages, and folder walks need a browser session (not --api).
+  syncFolders: false,
   autoOpenBrowser: true,
   theme: "system",
   // Suppresses the "files will be re-downloaded" confirmation when cancelling
@@ -475,6 +480,28 @@ function detectFtVersion() {
   return null;
 }
 
+// X bookmark folders a record belongs to, as [{ id, name }]. ft writes them
+// only under `ft sync --folders` / `--folder <name>`, as parallel arrays on
+// the jsonl record (`folderIds`, `folderNames`): absent on a record never
+// tagged, `[]` after a folder walk untagged it. Read from the jsonl, not the
+// db: ft's db copy keeps the old tags when a bookmark leaves its last
+// folder (serializeJsonArray([]) is null and falls back to the previous
+// value). Folder ids are stable across renames on X; the name is whatever
+// the last walk saw. A missing name falls back to the id.
+function readFolderTags(record) {
+  const ids = Array.isArray(record.folderIds) ? record.folderIds : [];
+  const names = Array.isArray(record.folderNames) ? record.folderNames : [];
+  const out = [];
+  const seen = new Set();
+  ids.forEach((id, i) => {
+    if (typeof id !== "string" || !id || seen.has(id)) return;
+    seen.add(id);
+    const name = typeof names[i] === "string" && names[i].trim() ? names[i] : id;
+    out.push({ id, name });
+  });
+  return out;
+}
+
 // Strip a trailing self-link URL from a bookmark's text when the bookmark
 // has a quoted tweet. Twitter appends the quoted tweet's URL to the text in
 // the extended-text format; X's web UI hides it because the quote card
@@ -656,6 +683,7 @@ function loadBookmarks() {
         media,
         primary_category: cats?.primary ?? null,
         categories: cats?.categories ?? [],
+        folders: readFolderTags(b),
         article,
         isThread: !!(b.tweetId && b.conversationId && b.tweetId !== b.conversationId),
         // Surfaced for the orphan-quote placeholder: when set without
@@ -903,6 +931,14 @@ const STATUS = {
   idleKilled:  (label, minutes) => `${label}: no output for ${minutes} min, stopped`,
   pipelineError: "Sync failed. See server log.",
   newBookmarks:    (n)              => `${n} new bookmarks`,
+  // `ft sync --folders` phase: "Syncing bookmark folders...", then
+  // "→ <name>..." as each folder walk starts. Nothing prints during a walk.
+  syncingFolders:   "Syncing X folders...",
+  syncingFolder:    (name) => `Syncing X folder ${name}...`,
+  // ft reports these and still exits 0 (folders are "bonus" to the main
+  // sync), so they're recorded as the run's failure line themselves.
+  folderSkipped:    (name, reason) => `X folder ${name} skipped: ${reason}`,
+  folderSyncError:  (msg) => `X folder sync failed: ${msg}`,
   // ft's scan past the old 10k cap: on archives of 9,500+ bookmarks, an
   // incremental sync that caught up keeps paging through the whole archive
   // (auto-continue in ft's graphql-bookmarks.ts; up to ft's 30-minute cap).
@@ -1282,8 +1318,16 @@ const server = createServer((req, res) => {
     // retry-after header — before saving its cursor or manifest. Output is
     // silent throughout, and killing ft then (it has no SIGTERM handler)
     // would drop exactly the progress the graceful cancel exists to keep.
+    //
+    // During ft's folder phase the limit is 30 min: a folder walk prints
+    // nothing from its "→ <name>..." line until the next folder, and one
+    // walk can run up to 1,000 pages plus 429 backoffs of 15-120 s.
     const IDLE_MIN = 5;
     const CANCEL_IDLE_MIN = 20;
+    const FOLDER_IDLE_MIN = 30;
+    // Set by the sync output parser while ft is in its folder phase; reset
+    // for each spawned run.
+    let ftFolderPhase = false;
     const run = (cmd, args, opts = {}) => new Promise((resolve) => {
       const { onOutput } = opts;
       // shell: true on Windows so npm-installed CLI shims (.cmd/.bat) resolve via PATH;
@@ -1296,7 +1340,9 @@ const server = createServer((req, res) => {
       let spawnFailed = false;
       let idleKilled = false;
       let lastActivity = Date.now();
-      const idleMinutes = () => (cancelRequested ? CANCEL_IDLE_MIN : IDLE_MIN);
+      ftFolderPhase = false;
+      const idleMinutes = () =>
+        cancelRequested ? CANCEL_IDLE_MIN : ftFolderPhase ? FOLDER_IDLE_MIN : IDLE_MIN;
       const idleTimer = setInterval(() => {
         if (Date.now() - lastActivity > idleMinutes() * 60 * 1000) {
           idleKilled = true;
@@ -1407,6 +1453,29 @@ const server = createServer((req, res) => {
               }
               continue;
             }
+            // Folder phase (--folders): runs after the main walk, before media.
+            if (line.includes("Syncing bookmark folders")) {
+              ftFolderPhase = true;
+              setStep(STATUS.syncingFolders);
+              continue;
+            }
+            const folderStart = line.match(/^→\s+(.+?)\.\.\.$/);
+            if (folderStart) {
+              setStep(STATUS.syncingFolder(folderStart[1]));
+              continue;
+            }
+            const folderSkip = line.match(/^⚠ Skipped (.+?): (.+)$/);
+            if (folderSkip) {
+              syncError ??= STATUS.folderSkipped(folderSkip[1], folderSkip[2]);
+              emitSync();
+              continue;
+            }
+            const folderErr = line.match(/^Folder sync error: (.+)$/);
+            if (folderErr) {
+              syncError ??= STATUS.folderSyncError(folderErr[1]);
+              emitSync();
+              continue;
+            }
             // Bookmark spinner: "Syncing bookmarks...  N new  │  page P  │  Ts".
             // During a scan that has added something, this is also the scan's
             // frame.
@@ -1437,11 +1506,13 @@ const server = createServer((req, res) => {
               if (Number.isFinite(processed) && Number.isFinite(downloaded) && processed >= 0 && processed < 10_000_000) {
                 // Nothing resolved yet: still say the media phase started,
                 // rather than leaving the last bookmark count up.
+                ftFolderPhase = false;
                 setStep(STATUS.mediaProgress(processed, downloaded) ?? STATUS.fetchingMedia);
               }
               continue;
             }
             if (line.includes("Building search index")) {
+              ftFolderPhase = false;
               setStep(STATUS.indexing);
               continue;
             }
@@ -1481,6 +1552,10 @@ const server = createServer((req, res) => {
           : ["sync"];
         if (s.skipMedia) syncArgs.push("--no-media");
         if (s.skipProfileImages) syncArgs.push("--skip-profile-images");
+        // ft runs folder walks only after a main walk that wasn't
+        // interrupted, so --folders rides on the plain / rebuild sync and
+        // not on the resume run.
+        if (s.syncFolders) syncArgs.push("--folders");
         await run("ft", syncArgs, { onOutput: makeSyncOutputParser() });
       }
       if (mode === "media" && !cancelRequested) {

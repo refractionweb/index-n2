@@ -17,6 +17,9 @@ export type Settings = {
   // are synced, media isn't downloaded inline. User can click Fetch Media
   // afterwards to handle media separately (with its own --limit cap).
   skipMedia: boolean;
+  // When true, Sync passes `--folders`: ft walks each X bookmark folder after
+  // the main walk and tags its members, which the sidebar lists as X folders.
+  syncFolders: boolean;
   autoOpenBrowser: boolean;
   theme: Theme;
   // Suppresses the "files will be re-downloaded" confirmation when cancelling
@@ -43,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mediaFetchLimit: 0,
   skipProfileImages: false,
   skipMedia: false,
+  syncFolders: false,
   autoOpenBrowser: true,
   theme: "system",
   cancelMediaWarningSuppressed: false,

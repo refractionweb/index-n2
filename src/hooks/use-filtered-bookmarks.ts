@@ -1,13 +1,11 @@
 import { useMemo } from "react";
 import { useBookmarks } from "@/contexts/bookmarks-context";
-import {
-  useActiveCollection,
-  useHiddenByCollections,
-} from "@/contexts/collections-context";
+import { useHiddenByCollections } from "@/contexts/collections-context";
 import { useFilter } from "@/contexts/filter-context";
 import { useHidden } from "@/contexts/hidden-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useTab } from "@/contexts/tab-context";
+import { useActiveMemberIds } from "@/hooks/use-active-members";
 import { filterBookmarks } from "@/lib/filter";
 import { getScopedBookmarks } from "@/lib/scope";
 import type { Bookmark } from "@/types/bookmark";
@@ -23,7 +21,7 @@ export function useFilteredBookmarks(): Bookmark[] {
   const { hiddenIds } = useHidden();
   const { activeTab } = useTab();
   const { settings } = useSettings();
-  const collectionIds = useActiveCollection()?.ids ?? null;
+  const memberIds = useActiveMemberIds();
   const hiddenByCollections = useHiddenByCollections();
 
   return useMemo(() => {
@@ -33,9 +31,9 @@ export function useFilteredBookmarks(): Bookmark[] {
       hiddenIds,
       activeTab === "archive",
       settings.hideUnfetched,
-      collectionIds,
+      memberIds,
       hiddenByCollections,
     );
     return filterBookmarks(scoped, state);
-  }, [bookmarks, state, hiddenIds, activeTab, settings.hideUnfetched, collectionIds, hiddenByCollections]);
+  }, [bookmarks, state, hiddenIds, activeTab, settings.hideUnfetched, memberIds, hiddenByCollections]);
 }

@@ -20,23 +20,24 @@ const EMPTY_SET: ReadonlySet<string> = new Set();
 // boolean `archived` parameter is the discriminator — caller derives it from
 // `activeTab === "archive"`.
 //
-// Collection partitioning: when `collectionIds` is given the scope is that
-// member set, regardless of archive state — membership is explicit, so an
-// archived bookmark still shows in a collection it was added to.
+// Member-set partitioning (a collection or an X folder tab): when
+// `memberIds` is given the scope is that set, regardless of archive state —
+// membership is explicit, so an archived bookmark still shows in a
+// collection it was added to or a folder it was saved in.
 //
 // `hiddenByCollections`: members of collections marked "Hide from Home".
 // Applied only on the home rule (Home, Gallery) — the archive tab and
-// collection tabs are explicit views and ignore it.
+// collection / folder tabs are explicit views and ignore it.
 export function getScopedBookmarks(
   bookmarks: Bookmark[],
   hiddenIds: ReadonlySet<string>,
   archived: boolean,
   hideUnfetched: boolean,
-  collectionIds: ReadonlySet<string> | null = null,
+  memberIds: ReadonlySet<string> | null = null,
   hiddenByCollections: ReadonlySet<string> = EMPTY_SET,
 ): Bookmark[] {
-  let visible = collectionIds
-    ? bookmarks.filter((b) => collectionIds.has(b.id))
+  let visible = memberIds
+    ? bookmarks.filter((b) => memberIds.has(b.id))
     : archived
       ? bookmarks.filter((b) => hiddenIds.has(b.id))
       : bookmarks.filter(

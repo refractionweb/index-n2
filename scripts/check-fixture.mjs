@@ -206,6 +206,15 @@ if (corrupt) {
   check("cat_unclassified", one((b) => b.primary_category === null && b.categories.length === 0));
   check("cat_primary_empty_list", one((b) => (b.primary_category === "opinion" && b.categories.length === 0) || `${b.primary_category} ${JSON.stringify(b.categories)}`));
 
+  const design = { id: "1980000000000000001", name: "Fixture design refs" };
+  const reading = { id: "1980000000000000002", name: "Fixture to read" };
+  const folderJson = (b) => JSON.stringify(b.folders);
+  check("folder_one", one((b) => folderJson(b) === JSON.stringify([design]) || folderJson(b)));
+  check("folder_two", one((b) => folderJson(b) === JSON.stringify([design, reading]) || folderJson(b)));
+  check("folder_untagged_stale_db", one((b) => folderJson(b) === "[]" || `read the db, not the jsonl: ${folderJson(b)}`));
+  check("folder_archived_member", one((b) => folderJson(b) === JSON.stringify([design]) || folderJson(b)));
+  check("folders_present_on_every_bookmark", () => bookmarks.every((b) => Array.isArray(b.folders)) || "a bookmark has no folders array");
+
   for (const lang of ["en", "ja", "zxx", "und"]) {
     check(`lang_${lang}`, () => bookmarks.some((b) => b.language === lang));
   }

@@ -5,6 +5,7 @@ import {
   RiArchiveLine,
   RiDeleteBinLine,
   RiFileCopyLine,
+  RiFolderCloudLine,
   RiFolderLine,
   RiGalleryLine,
   RiHomeLine,
@@ -66,10 +67,11 @@ import {
 import { useAppInfo, type FtClientStatus } from "@/contexts/app-info-context";
 import { useBookmarks } from "@/contexts/bookmarks-context";
 import { useCollections } from "@/contexts/collections-context";
+import { useFolders } from "@/contexts/folders-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useTab } from "@/contexts/tab-context";
 import { useSync } from "@/hooks/use-sync";
-import { collectionTab, type TabId } from "@/lib/tabs";
+import { collectionTab, folderTab, type TabId } from "@/lib/tabs";
 import { cn } from "@/lib/utils";
 
 export type { TabId } from "@/lib/tabs";
@@ -137,6 +139,7 @@ export function AppSidebar() {
     promptCreate,
     promptRename,
   } = useCollections();
+  const { folders } = useFolders();
   // Collection pending delete confirmation (its id), or null.
   const [deleteCollectionId, setDeleteCollectionId] = useState<string | null>(null);
   const deleteTarget = collections.find((c) => c.id === deleteCollectionId) ?? null;
@@ -212,7 +215,7 @@ export function AppSidebar() {
   // changes mediaFetchLimit / skipProfileImages / skipMedia.
   const syncCmd = `${resumePending ? "ft sync --continue --no-media --max-minutes 10; " : ""}ft sync${
     settings.skipMedia ? " --no-media" : ""
-  }${settings.skipProfileImages ? " --skip-profile-images" : ""}`;
+  }${settings.skipProfileImages ? " --skip-profile-images" : ""}${settings.syncFolders ? " --folders" : ""}`;
   const gapsCmd = `ft sync --gaps${settings.skipMedia ? " --no-media" : ""}${
     settings.skipProfileImages ? " --skip-profile-images" : ""
   }`;
@@ -385,6 +388,35 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {/* X bookmark folders, mirrored by `ft sync --folders`. Read-only
+            (ft can't write folders back to X), so no actions: rename,
+            delete and membership happen on X and arrive with the next
+            Sync. Hidden until a sync has tagged at least one folder. */}
+        {folders.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>X folders</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {folders.map((f) => {
+                  const tab = folderTab(f.id);
+                  return (
+                    <SidebarMenuItem key={f.id}>
+                      <SidebarMenuButton
+                        isActive={tab === activeTab}
+                        tooltip={f.name}
+                        onClick={() => setTab(tab)}
+                      >
+                        <RiFolderCloudLine />
+                        <span>{f.name}</span>
+                      </SidebarMenuButton>
+                      <SidebarMenuBadge className="max-md:hidden">{f.ids.size}</SidebarMenuBadge>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter>
         {showStatus && (

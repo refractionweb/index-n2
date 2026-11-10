@@ -866,6 +866,42 @@ for (let i = 0; i < FILLER_COUNT; i++) {
   fillerIds.push(id);
 }
 
+// --- X bookmark folders -----------------------------------------------------
+
+// ft writes folder tags only under `ft sync --folders`, as parallel arrays on
+// the jsonl record (folderIds, folderNames): absent on a record never tagged,
+// [] after a folder walk untagged it. Its db copy can lag: serializeJsonArray
+// of [] is null and falls back to the old value, so a bookmark that left its
+// last folder keeps stale db tags. folder_untagged_stale_db reproduces that;
+// the server must read the jsonl. No rand() here, so the rest of the fixture
+// is unchanged.
+const FOLDERS = {
+  design: { id: "1980000000000000001", name: "Fixture design refs" },
+  reading: { id: "1980000000000000002", name: "Fixture to read" },
+};
+const recordById = new Map(records.map((r) => [r.id, r]));
+function setFolders(id, jsonlFolders, dbFolders = jsonlFolders) {
+  const r = recordById.get(id);
+  r.folderIds = jsonlFolders.map((f) => f.id);
+  r.folderNames = jsonlFolders.map((f) => f.name);
+  const row = dbRows.get(id) ?? { primary: "unclassified", categories: null };
+  dbRows.set(id, {
+    ...row,
+    folderIds: dbFolders.length ? JSON.stringify(dbFolders.map((f) => f.id)) : null,
+    folderNames: dbFolders.length ? JSON.stringify(dbFolders.map((f) => f.name)) : null,
+  });
+}
+for (const id of fillerIds.slice(20, 32)) setFolders(id, [FOLDERS.design]);
+for (const id of fillerIds.slice(32, 40)) setFolders(id, [FOLDERS.reading]);
+setFolders(fillerIds[40], [FOLDERS.design, FOLDERS.reading]);
+setFolders(fillerIds[41], [], [FOLDERS.reading]);
+// Archived, and still in a folder: folder tabs show explicit members.
+setFolders(fillerIds[5], [FOLDERS.design]);
+tag(fillerIds[20], "folder_one");
+tag(fillerIds[40], "folder_two");
+tag(fillerIds[41], "folder_untagged_stale_db");
+tag(fillerIds[5], "folder_archived_member");
+
 // --- bookmarks.jsonl --------------------------------------------------------
 
 const lines = records.map((r) => JSON.stringify(r));
@@ -931,7 +967,7 @@ for (const r of records) {
     r.media.length, r.links.length, r.links.length ? JSON.stringify(r.links) : null, null,
     r.ingestedVia, orNull(x.categories), x.primary, null, null, null,
     r.quotedTweet ? JSON.stringify(r.quotedTweet) : null,
-    orNull(x.articleTitle), orNull(x.articleText), orNull(x.articleSite), orNull(x.enrichedAt), null, null,
+    orNull(x.articleTitle), orNull(x.articleText), orNull(x.articleSite), orNull(x.enrichedAt), orNull(x.folderIds), orNull(x.folderNames),
   ]);
 }
 insert.free();

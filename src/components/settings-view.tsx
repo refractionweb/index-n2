@@ -107,13 +107,29 @@ export function SettingsView() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Folders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ToggleRow
+            id="syncFolders"
+            label="Sync X folders"
+            description="Adds --folders to Sync. After the main sync, ft walks each X bookmark folder and tags its members, listed under X folders in the sidebar. One extra walk per folder. Read-only: changes made on X arrive with the next Sync."
+            checked={settings.syncFolders}
+            onChange={(v) => update({ syncFolders: v })}
+            disabled={ftDisabled}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Media</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <ToggleRow
             id="skipMedia"
             label="Skip media on sync"
-            description="When on, Sync runs ft sync --no-media: only bookmarks are updated, media isn't fetched. Use Fetch Media separately to download media with a cap. Off by default — ft sync fetches media at no limit."
+            description="When on, Sync and Backfill Gaps pass --no-media: only bookmarks are updated, media isn't fetched. Use Fetch Media separately to download media with a cap. Off by default — ft sync fetches media at no limit."
             checked={settings.skipMedia}
             onChange={(v) => update({ skipMedia: v })}
             disabled={ftDisabled}
@@ -133,7 +149,7 @@ export function SettingsView() {
           <ToggleRow
             id="skipProfileImages"
             label="Skip profile images"
-            description="Don't download author avatars. Adds --skip-profile-images to ft sync and ft fetch-media. Saves disk and bandwidth if you don't care about author thumbnails."
+            description="Don't download author avatars. Adds --skip-profile-images to Sync, Fetch Media and Backfill Gaps. Saves disk and bandwidth if you don't care about author thumbnails."
             checked={settings.skipProfileImages}
             onChange={(v) => update({ skipProfileImages: v })}
             disabled={ftDisabled}

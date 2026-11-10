@@ -35,6 +35,11 @@ export type MediaItem = {
   posterOnly?: boolean;
 };
 
+export type BookmarkFolder = {
+  id: string;
+  name: string;
+};
+
 export type Engagement = {
   likeCount: number;
   repostCount: number;
@@ -89,6 +94,10 @@ export type Bookmark = {
   // `categories`, not just `primary_category`.
   primary_category: string | null;
   categories: string[];
+  // X bookmark folders this bookmark is in, from `ft sync --folders`. Empty
+  // when never tagged or untagged since. Read-only: ft can't write folders
+  // back to X. Folder ids are stable across renames on X.
+  folders: BookmarkFolder[];
   // X Article enrichment (`article_title` + `article_text` from
   // bookmarks.db). Populated only when the bookmark links to an X Article
   // (`x.com/i/article/<id>`); other ft-enriched URLs (YouTube, GitHub,

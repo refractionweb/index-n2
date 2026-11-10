@@ -75,6 +75,19 @@ async function sync() {
   }
   await phase(range(8).map((i) =>
     `Syncing bookmarks...  ${Math.min(i, 3)} new  │  page ${1 + Math.floor(i / 4)}  │  ${Math.floor(i / 3)}s`));
+  if (has("--folders")) {
+    // ft's folder phase: a header on stderr, one "→ <name>..." line per
+    // folder, nothing during a walk, then per-folder summaries on stdout.
+    process.stderr.write("\n  Syncing bookmark folders...\n");
+    for (const name of ["Fixture design refs", "Fixture to read"]) {
+      process.stderr.write(`  \u2192 ${name}...\n`);
+      await sleep(FRAME_MS * 4);
+    }
+    console.log("");
+    console.log(`  \u2713 ${"Fixture design refs".padEnd(24)}  13 unchanged`);
+    console.log(`  \u2713 ${"Fixture to read".padEnd(24)}  9 unchanged`);
+    console.log("");
+  }
   if (!has("--no-media")) {
     await phase(range(10).map((i) =>
       `Fetching media...  ${i} processed  │  ${Math.max(0, i - 1)} downloaded  │  ${Math.floor(i / 3)}s`));

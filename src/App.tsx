@@ -18,6 +18,7 @@ import { AppInfoProvider, useAppInfo } from "@/contexts/app-info-context";
 import { BookmarksProvider } from "@/contexts/bookmarks-context";
 import { CollectionsProvider } from "@/contexts/collections-context";
 import { FilterProvider, useFilter } from "@/contexts/filter-context";
+import { FoldersProvider } from "@/contexts/folders-context";
 import { GalleryZoomProvider } from "@/contexts/gallery-zoom-context";
 import { HiddenProvider } from "@/contexts/hidden-context";
 import { LightboxProvider, useLightbox } from "@/contexts/lightbox-context";
@@ -55,11 +56,13 @@ function AppProviders({ children }: { children: ReactNode }) {
         <FilterProvider>
           <TabProvider>
             <CollectionsProvider>
-              <GalleryZoomProvider>
-                <SelectionProvider>
-                  <LightboxProvider>{children}</LightboxProvider>
-                </SelectionProvider>
-              </GalleryZoomProvider>
+              <FoldersProvider>
+                <GalleryZoomProvider>
+                  <SelectionProvider>
+                    <LightboxProvider>{children}</LightboxProvider>
+                  </SelectionProvider>
+                </GalleryZoomProvider>
+              </FoldersProvider>
             </CollectionsProvider>
           </TabProvider>
         </FilterProvider>
