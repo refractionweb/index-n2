@@ -137,8 +137,9 @@ export function filterBookmarks(
   // The search term is dual-purpose. We try to parse it as a
   // date; if it parses, a bookmark passes when EITHER the text matches OR the
   // date matches (OR, not AND). Typing "april" includes both bookmarks
-  // containing the word and bookmarks posted in any April.
-  const dateFilter = hasTerm ? parseDateQuery(term) : null;
+  // containing the word and bookmarks posted in any April. Parsed from the
+  // raw query so "@jan" (a handle search) isn't read as January.
+  const dateFilter = hasTerm ? parseDateQuery(trimmed) : null;
   const hasCategories = categoryFilter.size > 0;
   const wantsUnclassified = categoryFilter.has(UNCLASSIFIED_CATEGORY);
 
@@ -219,9 +220,10 @@ export function filterAndFlattenGallery(
   const { accounts, types, color, search, categories: categoryFilter, languages, sort, order } = state;
   const hasAccounts = accounts.size > 0;
   const hasLanguages = languages.size > 0;
-  const term = search.trim().toLowerCase().replace(/^@/, "");
+  const trimmed = search.trim();
+  const term = trimmed.toLowerCase().replace(/^@/, "");
   const hasTerm = term.length > 0;
-  const dateFilter = hasTerm ? parseDateQuery(term) : null;
+  const dateFilter = hasTerm ? parseDateQuery(trimmed) : null;
   const hasCategories = categoryFilter.size > 0;
   const wantsUnclassified = categoryFilter.has(UNCLASSIFIED_CATEGORY);
 

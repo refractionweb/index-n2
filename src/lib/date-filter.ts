@@ -37,24 +37,31 @@ export type DateFilter = {
   day?: number;
 };
 
-// Parse a (lowercased, @-stripped) search term into a DateFilter, or null
-// if the term doesn't look date-shaped.
+// Parse a search query into a DateFilter, or null if the query isn't
+// date-shaped. The whole query must be a date expression: every token has
+// to be a month name, a day, or a year. A date word inside an ordinary
+// query ("jan koum", "today i learned", "react 2025 roadmap") stays a text
+// search; otherwise the date match, which is ORed with the text match,
+// would pull in every bookmark from that period. Handle searches ("@jan")
+// never parse as dates.
 export function parseDateQuery(term: string): DateFilter | null {
   if (!term) return null;
   const normalized = term.toLowerCase().trim();
-  const tokens = normalized.split(/\s+/);
+  if (!normalized || normalized.startsWith("@")) return null;
+  // Commas separate tokens so "apr 5, 2024" reads as month + day + year.
+  const tokens = normalized.split(/[\s,]+/).filter(Boolean);
   const now = new Date();
 
-  if (tokens[0] === "today") {
+  const phrase = tokens.join(" ");
+  if (phrase === "today") {
     const s = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     return { start: s, end: new Date(s.getTime() + DAY_MS) };
   }
-  if (tokens[0] === "yesterday") {
+  if (phrase === "yesterday") {
     const s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
     return { start: s, end: new Date(s.getTime() + DAY_MS) };
   }
 
-  const phrase = tokens.join(" ");
   if (phrase === "this week") {
     const day = now.getDay();
     const s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
@@ -108,25 +115,33 @@ export function parseDateQuery(term: string): DateFilter | null {
     return { start: s, end: now };
   }
 
-  // Free-form: month name, day, year — any combination, any order.
+  // Free-form: month name, day, year — any combination, any order. Any
+  // other token, or a second month / day / year, means the query isn't a
+  // date.
   let month: number | null = null;
   let day: number | null = null;
   let year: number | null = null;
   for (const t of tokens) {
     if (MONTH_MAP[t] !== undefined) {
+      if (month !== null) return null;
       month = MONTH_MAP[t];
     } else if (/^\d{4}$/.test(t)) {
+      if (year !== null) return null;
       year = parseInt(t, 10);
     } else if (/^\d{1,2}$/.test(t)) {
       const n = parseInt(t, 10);
-      if (n >= 1 && n <= 31) day = n;
+      if (day !== null || n < 1 || n > 31) return null;
+      day = n;
+    } else {
+      return null;
     }
   }
 
   if (month === null && year === null) return null;
 
-  // Year only: "2024"
+  // Year only: "2024". A day without a month ("5 2024") isn't a date.
   if (month === null && year !== null) {
+    if (day !== null) return null;
     return {
       start: new Date(year, 0, 1),
       end: new Date(year + 1, 0, 1),
