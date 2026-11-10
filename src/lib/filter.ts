@@ -192,18 +192,43 @@ export function filterBookmarks(
     result.push(b);
   }
 
-  applySort(result, sort, order);
+  applySort(result, sort, order, state.shuffleNonce);
   return result;
 }
 
-function applySort(result: Bookmark[], sort: SortKey, order: SortOrder) {
+// Random order is a pure function of (bookmark id, shuffleNonce): each
+// bookmark gets a hashed key and the list sorts by it. Every consumer of the
+// filtered list (grid, top bar count, selection-bar export) recomputes it
+// independently, and recomputes on unrelated changes (archiving a card,
+// editing a collection); a seeded order keeps all of them in agreement and
+// keeps the grid still until the dice re-rolls the nonce.
+function shuffleKey(id: string, seed: number): number {
+  // FNV-1a over the id, then murmur3's fmix32 to spread the bits.
+  let h = (seed ^ 0x811c9dc5) >>> 0;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+function applySort(
+  result: Bookmark[],
+  sort: SortKey,
+  order: SortOrder,
+  shuffleNonce: number
+) {
   if (sort === "random") {
-    // Fisher-Yates, fresh every recompute.
-    // Order is irrelevant for random and ignored.
-    for (let i = result.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [result[i], result[j]] = [result[j], result[i]];
-    }
+    // Order (asc/desc) is irrelevant for random and ignored.
+    const seed = Math.floor(shuffleNonce * 0x100000000) >>> 0;
+    const keyed = result.map((b) => ({ b, k: shuffleKey(b.id, seed) }));
+    keyed.sort((x, y) => x.k - y.k || x.b._order - y.b._order);
+    for (let i = 0; i < keyed.length; i++) result[i] = keyed[i].b;
     return;
   }
   result.sort(descSortFns[sort]);
@@ -262,7 +287,7 @@ export function filterAndFlattenGallery(
     surviving.push(b);
   }
 
-  applySort(surviving, sort, order);
+  applySort(surviving, sort, order, state.shuffleNonce);
 
   // Per-image pass: only image/video/gif type filters apply in gallery; the
   // text/link/quoted/thread filters are ignored (they're bookmark-level

@@ -52,11 +52,10 @@ export type FilterState = {
   // Direction. Convention: "desc" = highest values first (newest dates,
   // most likes), "asc" = lowest first. Ignored when sort === "random".
   order: SortOrder;
-  // Bumped to a fresh value on each "reshuffle" dice click. The value
-  // itself doesn't drive the random sort (Fisher-Yates uses Math.random
-  // directly), but changing this nonce invalidates the filter useMemo
-  // and forces the shuffle to re-run with a fresh random sequence —
-  // gives the user a way to re-roll without touching other filters.
+  // Seed of the random sort (see applySort in lib/filter.ts): the order is
+  // a pure function of this value and the bookmark ids, so it stays put
+  // until the dice click sets a fresh value. Random per page load, kept
+  // across Clear all.
   // Also seeds the dice cube's initial face on mount via
   // `(floor(shuffleNonce * 6) + 1)`. DiceCube owns its own non-repeat
   // guarantee across clicks (see pickTumble there).
@@ -91,7 +90,7 @@ const initialState: FilterState = {
   search: "",
   sort: "saved-date",
   order: "desc",
-  shuffleNonce: 0,
+  shuffleNonce: Math.random(),
 };
 
 function reducer(state: FilterState, action: Action): FilterState {
@@ -155,13 +154,18 @@ function reducer(state: FilterState, action: Action): FilterState {
         ? state
         : { ...state, order: action.order };
     case "reshuffleRandom":
-      // Fresh nonce invalidates the filter memo so the pipeline re-runs
-      // Fisher-Yates. DiceCube owns the dice-face anti-repeat guarantee
-      // internally (see pickTumble there).
+      // Fresh nonce = fresh random order. DiceCube owns the dice-face
+      // anti-repeat guarantee internally (see pickTumble there).
       return { ...state, shuffleNonce: Math.random() };
     case "clearAll":
-      // Preserve user's chosen sort + order across filter resets.
-      return { ...initialState, sort: state.sort, order: state.order };
+      // Preserve user's chosen sort + order, and the current shuffle, across
+      // filter resets.
+      return {
+        ...initialState,
+        sort: state.sort,
+        order: state.order,
+        shuffleNonce: state.shuffleNonce,
+      };
   }
 }
 
