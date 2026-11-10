@@ -9,12 +9,26 @@ export type SyncState = {
   // no subprocess to kill and the rebuild is short enough (~1s cached,
   // ~30s cold) that waiting through it is fine.
   canCancel: boolean;
+  // Failure line from the last run ("ft sync: exited with code 1"), or
+  // null. Server-side state, cleared when the next run starts. Also carries
+  // a rejected /api/sync request (see startSync), which the server never
+  // sees as a run.
+  error: string | null;
 };
 
-const INITIAL: SyncState = { running: false, step: null, unfetchedCount: 0, canCancel: false };
+const INITIAL: SyncState = {
+  running: false,
+  step: null,
+  unfetchedCount: 0,
+  canCancel: false,
+  error: null,
+};
 
 export function useSync() {
   const [state, setState] = useState<SyncState>(INITIAL);
+  // A request the server refused or never received. Kept apart from the
+  // streamed state so the next SSE frame doesn't erase it.
+  const [requestError, setRequestError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -22,7 +36,8 @@ export function useSync() {
     esRef.current = es;
     es.onmessage = (e) => {
       try {
-        setState(JSON.parse(e.data));
+        const next = JSON.parse(e.data) as Partial<SyncState>;
+        setState({ ...INITIAL, ...next });
       } catch {
         // ignore malformed messages
       }
@@ -36,13 +51,28 @@ export function useSync() {
     };
   }, []);
 
-  const startSync = useCallback(async (mode: "all" | "bookmarks-rebuild" | "media" | "gaps" = "all") => {
-    const res = await fetch(`/api/sync?mode=${mode}`, { method: "POST" });
-    if (!res.ok) {
+  // Never throws: callers are click handlers with nothing useful to do with
+  // a rejection. A 409 means a run is already going (double-click before
+  // the stream reports `running`) and needs no message — the stream shows
+  // that run.
+  const startSync = useCallback(
+    async (mode: "all" | "bookmarks-rebuild" | "media" | "gaps" = "all") => {
+      setRequestError(null);
+      let res: Response;
+      try {
+        res = await fetch(`/api/sync?mode=${mode}`, { method: "POST" });
+      } catch {
+        setRequestError("Sync request failed: server unreachable.");
+        return;
+      }
+      if (res.ok || res.status === 409) return;
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || `Sync failed (${res.status})`);
-    }
-  }, []);
+      setRequestError(
+        `Sync request failed: ${body.error || `HTTP ${res.status}`}.`
+      );
+    },
+    []
+  );
 
   // Fire-and-forget: the server emits the state change via SSE, so the local
   // state updates through the same path as normal progress events. No need to
@@ -51,5 +81,10 @@ export function useSync() {
     await fetch("/api/sync/cancel", { method: "POST" }).catch(() => {});
   }, []);
 
-  return { ...state, startSync, cancelSync };
+  return {
+    ...state,
+    error: requestError ?? state.error,
+    startSync,
+    cancelSync,
+  };
 }

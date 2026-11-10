@@ -796,14 +796,21 @@ const STATUS = {
   indexing:             "Indexing...",
   buildingCaches:       "Building caches...",
   newBookmarksDetected: "New bookmarks detected...",
-  // Surfaces a libuv spawn failure (ft binary missing or non-executable) to
-  // the sidebar before the pipeline rolls forward to runRebuild. Without the
-  // error handler in run(), an uncaught 'error' event from spawn crashes
-  // the server outright — Node has no default uncaughtException trap here.
+  // Failure lines. Stored in `syncError` (not `syncStep`, which the rebuild
+  // phase overwrites) and shown in the idle sidebar until the next run.
+  // spawnError covers libuv spawn failures (ft binary missing or non-
+  // executable); without the error handler in run(), an uncaught 'error'
+  // event from spawn crashes the server outright — Node has no default
+  // uncaughtException trap here.
   spawnError: (code) =>
     code === "ENOENT" ? "ft: command not found" :
     code === "EACCES" ? "ft: permission denied" :
     `ft: spawn failed (${code || "unknown"})`,
+  // `label` is the subcommand as typed, e.g. "ft sync --gaps".
+  exitError:   (label, code, signal) =>
+    signal ? `${label}: terminated (${signal})` : `${label}: exited with code ${code}`,
+  idleKilled:  (label) => `${label}: no output for 5 min, stopped`,
+  pipelineError: "Sync failed. See server log.",
   newBookmarks:    (n)              => `${n} new bookmarks`,
   // Media-phase live progress. ft's spinner emits "N processed │ M downloaded";
   // we surface the two outcome counts directly — downloaded and failed
@@ -883,6 +890,10 @@ let activeProc = null;
 // so a cancel during `ft sync` skips the subsequent `ft fetch-media`. Reset
 // to false at the top of each /api/sync run.
 let cancelRequested = false;
+// Failure line from the last /api/sync run (one of the STATUS failure
+// lines), or null. Cleared when the next run starts. A user cancel is not a
+// failure.
+let syncError = null;
 const syncEvents = new EventEmitter();
 // Each open /api/sync-stream (SSE) connection attaches one "update" listener,
 // detached on close (see the /api/sync-stream handler). Many tabs — or an
@@ -890,14 +901,19 @@ const syncEvents = new EventEmitter();
 // listener-leak warning even though nothing leaks. Raise the ceiling so the
 // false positive stays out of the console; real leaks would still climb past 50.
 syncEvents.setMaxListeners(50);
-function emitSync(extra) {
-  syncEvents.emit("update", {
+// One shape for the SSE stream, its initial frame, and /api/sync-status.
+function syncSnapshot() {
+  return {
     running: syncRunning,
     step: syncStep,
     unfetchedCount,
     canCancel: !!activeProc,
-    ...extra,
-  });
+    error: syncError,
+  };
+}
+
+function emitSync() {
+  syncEvents.emit("update", syncSnapshot());
 }
 
 // Single in-flight rebuild promise. All callers share it so startup / /api/sync /
@@ -1062,6 +1078,7 @@ const server = createServer((req, res) => {
     }
     syncRunning = true;
     syncStep = STATUS.starting;
+    syncError = null;
     cancelRequested = false;
     emitSync();
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -1080,9 +1097,14 @@ const server = createServer((req, res) => {
       const proc = spawnCmd(cmd, args, { shell: process.platform === "win32" });
       activeProc = proc;
       emitSync();
+      // "ft sync", "ft sync --gaps", "ft fetch-media" — for failure lines.
+      const label = [cmd, args[0], ...args.filter((a) => a === "--gaps" || a === "--rebuild")].join(" ");
+      let spawnFailed = false;
+      let idleKilled = false;
       let lastActivity = Date.now();
       const idleTimer = setInterval(() => {
         if (Date.now() - lastActivity > IDLE_MS) {
+          idleKilled = true;
           // kill() throws on some platforms if the proc is already exiting
           // (between idle-fire and 'close'); swallow so the interval can
           // clear cleanly either way.
@@ -1106,13 +1128,20 @@ const server = createServer((req, res) => {
       proc.on("error", (err) => {
         clearInterval(idleTimer);
         if (activeProc === proc) activeProc = null;
-        syncStep = STATUS.spawnError(err.code);
+        spawnFailed = true;
+        syncError = STATUS.spawnError(err.code);
         emitSync();
         resolve(false);
       });
-      proc.on("close", (code) => {
+      proc.on("close", (code, signal) => {
         clearInterval(idleTimer);
         if (activeProc === proc) activeProc = null;
+        // A spawn failure already recorded its own line; a user cancel
+        // (SIGINT, non-zero exit) is not a failure.
+        if (!spawnFailed && code !== 0) {
+          if (idleKilled) syncError = STATUS.idleKilled(label);
+          else if (!cancelRequested) syncError = STATUS.exitError(label, code, signal);
+        }
         emitSync();
         resolve(code === 0);
       });
@@ -1263,6 +1292,7 @@ const server = createServer((req, res) => {
       // refuse to work until server restart — the kind of bug that's
       // invisible until production and miserable to debug.
       console.error("sync pipeline failed:", e);
+      syncError = STATUS.pipelineError;
     }).finally(() => {
       // Ownership: runRebuild owns syncRunning while it's in flight (its own
       // .finally at line ~617 clears it on completion). Only reset here when
@@ -1314,7 +1344,7 @@ const server = createServer((req, res) => {
   // API: sync status (legacy polling endpoint — kept for backward compat)
   if (path === "/api/sync-status") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ running: syncRunning, step: syncStep, unfetchedCount, canCancel: !!activeProc }));
+    res.end(JSON.stringify(syncSnapshot()));
     return;
   }
 
@@ -1336,7 +1366,7 @@ const server = createServer((req, res) => {
         syncEvents.off("update", send);
       }
     };
-    send({ running: syncRunning, step: syncStep, unfetchedCount, canCancel: !!activeProc });
+    send(syncSnapshot());
     syncEvents.on("update", send);
     // Symmetric cleanup: 'close' covers normal disconnect, 'error' covers
     // connection failure modes (TCP reset, header parse error mid-flight)

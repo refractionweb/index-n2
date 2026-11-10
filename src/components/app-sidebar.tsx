@@ -91,7 +91,7 @@ export const NAV_TABS: readonly Tab[] = [
 
 export function AppSidebar() {
   const { activeTab, setTab } = useTab();
-  const { running, step, unfetchedCount, canCancel, startSync, cancelSync } = useSync();
+  const { running, step, unfetchedCount, canCancel, error: syncError, startSync, cancelSync } = useSync();
   const { bookmarks, reload } = useBookmarks();
   const { settings, update: updateSettings } = useSettings();
   const { info, loaded: infoLoaded } = useAppInfo();
@@ -161,6 +161,8 @@ export function AppSidebar() {
   // Each entry is a ReactNode so the install-command line can render the
   // CopyableCode component; plain string entries are rendered as text.
   const idleStatusLines: ReactNode[] = [];
+  // Last run's failure leads, so it isn't lost under the routine lines.
+  if (syncError) idleStatusLines.push(syncError);
   if (ftStatus === "missing") {
     idleStatusLines.push(
       "ft is not detected. Sync is disabled.",
